@@ -95,12 +95,13 @@ For a single-config generator such as Ninja, the executable is normally:
 ```
 
 The program prints basic progress to the terminal and overwrites
-`output/output.out` with the new data. The `output/` directory is present in 
-the reposirory, along with a sample output.out file.
+`output/output.out` with the new trace. The `output/` directory must be present
+in the repository; Git cannot retain an empty directory.
 
 In Visual Studio, opening the project folder lets CMake configure the project.
-Build and run the `simulator` target from the CMake Targets view.  CMake builds 
-the current executable under its build directory.
+Build and run the `simulator` target from the CMake Targets view. Do not rely
+on a stale `src/main.exe`; CMake builds the current executable under its build
+directory.
 
 ## Run the visualizer
 
@@ -185,11 +186,12 @@ These constants are currently defined at the top of `src/main.cpp`:
 | Random seed | `100` |
 
 The fixed seed makes runs deterministic while the input data and constants are
-unchanged. Changing the constants generates new traffic patterns.
+unchanged.
 
 ## Trace format
 
-`output/output.out` is a whitespace-delimited trace. Its first line is the number of frames. Each frame then contains the
+`output/output.out` is a whitespace-delimited trace, despite the `.out`
+extension. Its first line is the number of frames. Each frame then contains the
 number of active vehicles followed by one row per active vehicle:
 
 ```text
