@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traffic map</title>
+  <style>
+    body { margin: 0; padding: 24px; background: #fff; color: #1f2933; font-family: Bahnschrift, "Arial Narrow",Arial, sans-serif; }
+    main { width: min(860px, 100%); margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+    p { margin: 0 0 16px; color: #667085; font-size: 14px; }
+    svg { display: block; width: 100%; height: auto; background: #fff; }
+    .grid { stroke: #e8edf2; stroke-width: .35; }
+    .axis { stroke: #bac5d0; stroke-width: .7; }
+    .road { stroke: #485563; stroke-width: 2.2; stroke-linecap: butt; }
+    .centerline { stroke: #eab308; stroke-width: .18; stroke-dasharray: 1.1 1.1; stroke-linecap: butt; }
+    .direction-arrow { fill: none; stroke: #263542; stroke-width: .28; stroke-linecap: round; stroke-linejoin: round; }
+    .node { fill: #fff; stroke: #1f2933; stroke-width: 0.32; }
+    .node-label { fill: #1f2933; font-size: 3px; text-anchor: middle; dominant-baseline: middle; }
+    .tick { fill: #7a8794; font-size: 2.5px; text-anchor: middle; }
+    .controls { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+    button { border: 1px solid #c8d0d8; background: #fff; color: #1f2933; padding: 5px 9px; cursor: pointer; }
+    button,input, output { font: inherit; }
+    button:disabled { opacity: .45; cursor: default; }
+    input[type="range"] { flex: 1 1 240px; }
+    .frame { min-width: 120px; font-variant-numeric: tabular-nums; color: #475467; font-size: 14px; }
+    .vehicle { fill: #6ad920; stroke: #096d12; stroke-width: .05; }
+    .vehicle-label { fill: #fff; font-size: 1px; text-anchor: middle; dominant-baseline: middle; font-weight: 700; }
+    .error { color: #b42318; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Traffic simulation alpha</h1>
+    <p id="status">Reading data...</p>
+    <div class="controls" aria-label="Simulation controls">
+      <button type="button" id="previous">Step back</button>
+      <button type="button" id="next">Step ahead</button>
+      <button type="button" id="run">Run</button>
+      <button type="button" id="pause" disabled>Pause</button>
+      <input id="frame-slider" type="range" min="0" value="0" aria-label="Step of the simulation">
+      <output id="frame" class="frame" aria-live="polite">Step 0 / 0</output>
+    </div>
+    <svg id="map" viewBox="-8 -8 80 100" role="img" aria-label="The road network"></svg>
+  </main>
+  <script>
+    const svg = document.getElementById('map');
+    const status = document.getElementById('status');
+    const slider = document.getElementById('frame-slider');
+    const frameLabel = document.getElementById('frame');
+    const previous = document.getElementById('previous');
+    const next = document.getElementById('next');
+    const run = document.getElementById('run');
+    const pause = document.getElementById('pause');
+    const ns = 'http://www.w3.org/2000/svg';
+    let lastNetwork = '';
+    let frames = [];
+    let currentFrame = 0;
+    let running = null;
+    let mapHeight = 0;
+    let vehiclesLayer;
+    let traceNotice = '';
+    let nodesById = new Map();
+    let roadsById = new Map();
+    let directedRoads = new Set();
+    const laneSeparation = 2.2;
+
+    const make = (tag, attrs = {}) => {
+      const el = document.createElementNS(ns, tag);
+      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+      return el;
+    };
+
+    function parseCsv(text) {
+      const [header, ...rows] = text.trim().split(/\r?\n/);
+      const fields = header.split(',');
+      return rows.filter(Boolean).map(row => {
+        const values = row.split(',');
+        return Object.fromEntries(fields.map((field, i) => [field, Number(values[i]) ]));
+      });
+    }
+
+    function parseTrace(text) {
+      const lines = text.trim().split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      let cursor = 0;
+      const numberOfFrames = Number(lines[cursor++]);
+      const result = [];
+      for (let frame = 0; frame < numberOfFrames; frame++) {
+        if (cursor >= lines.length) return { frames: result, notice: `Trace incomplete: ${result.length} of ${numberOfFrames} steps.` };
+        const count = Number(lines[cursor++]);
+        if (cursor + count > lines.length) return { frames: result, notice: `Trace incomplete: ${result.length} of ${numberOfFrames} steps.` };
+        const vehicles = [];
+        for (let i = 0; i < count; i++) {
+          const [id, from, to, roadId, position] = lines[cursor++].trim().split(/\s+/).map(Number);
+          vehicles.push({ id, from, to, roadId, position });
+        }
+        result.push(vehicles);
+      }
+      if (cursor !== lines.length) throw new Error('Additional data in output.out');
+      return { frames: result, notice: '' };
+    }
+
+    function renderFrame() {
+      if (!vehiclesLayer || !frames.length) return;
+      vehiclesLayer.replaceChildren();
+      frames[currentFrame].forEach(vehicle => {
+        const road = roadsById.get(vehicle.roadId);
+        if (!road) return;
+        const from = nodesById.get(road.from);
+        const to = nodesById.get(road.to);
+        const start = { x: from.x, y: mapHeight - from.y };
+        const end = { x: to.x, y: mapHeight - to.y };
+        const position = Math.max(0, Math.min(1, vehicle.position));
+        const lane = lanePoints(road, start, end);
+        const x = lane.from.x * (1 - position) + lane.to.x * position;
+        const y = lane.from.y * (1 - position) + lane.to.y * position;
+        vehiclesLayer.append(make('circle', { class: 'vehicle', cx: x, cy: y, r: 1}));
+        const label = make('text', { class: 'vehicle-label', x, y: y + .1 });
+        label.textContent = vehicle.id;
+        vehiclesLayer.append(label);
+      });
+      slider.value = currentFrame;
+      frameLabel.textContent = `Step ${currentFrame} / ${frames.length - 1} (${frames[currentFrame].length} vehicles)`;
+      previous.disabled = currentFrame === 0;
+      next.disabled = currentFrame === frames.length - 1;
+    }
+
+    function setFrame(frame) {
+      currentFrame = Math.max(0, Math.min(frame, frames.length - 1));
+      renderFrame();
+    }
+
+    function stop() {
+      if (running !== null) clearInterval(running);
+      running = null;
+      run.disabled = false;
+      pause.disabled = true;
+    }
+
+    function lanePoints(road, from, to) {
+      if (!directedRoads.has(`${road.to}-${road.from}`)) return { from, to };
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const length = Math.hypot(dx, dy);
+      const offsetX = -dy / length * laneSeparation / 2;
+      const offsetY = dx / length * laneSeparation / 2;
+      return {
+        from: { x: from.x + offsetX, y: from.y + offsetY },
+        to: { x: to.x + offsetX, y: to.y + offsetY }
+      };
+    }
+
+    function addArrow(from, to, fraction) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const length = Math.hypot(dx, dy);
+      const ux = dx / length, uy = dy / length;
+      const tipX = from.x + dx * fraction, tipY = from.y + dy * fraction;
+      const baseX = tipX - ux * 1.1, baseY = tipY - uy * 1.1;
+      const wing = .5;
+      const leftX = baseX - uy * wing, leftY = baseY + ux * wing;
+      const rightX = baseX + uy * wing, rightY = baseY - ux * wing;
+      svg.append(make('path', { class: 'direction-arrow', d: `M ${leftX} ${leftY} L ${tipX} ${tipY} L ${rightX} ${rightY}` }));
+    }
+
+    function addDirectionMarkers(from, to) {
+      const length = Math.hypot(to.x - from.x, to.y - from.y);
+      for (let distance = 10; distance < length - 2; distance += 10) {
+        addArrow(from, to, distance / length);
+      }
+    }
+
+    function draw(nodes, roads) {
+      svg.replaceChildren();
+      const maxX = Math.max(...nodes.map(node => node.x));
+      const maxY = Math.max(...nodes.map(node => node.y));
+      const gridStep = 10;
+      const width = Math.ceil(maxX / gridStep) * gridStep;
+      const height = Math.ceil(maxY / gridStep) * gridStep;
+      mapHeight = height;
+      svg.setAttribute('viewBox', `${-8} ${-8} ${width + 20} ${height + 20}`);
+      const byId = new Map(nodes.map(node => [node.id, node]));
+      nodesById = byId;
+      roadsById = new Map(roads.map(road => [road.id, road]));
+      const point = node => ({ x: node.x, y: height - node.y });
+
+      const defs = make('defs');
+      const arrow = make('marker', { id: 'arrow', viewBox: '0 0 6 6', refX: '5.4', refY: '3', markerWidth: '3', markerHeight: '3', orient: 'auto' });
+      arrow.append(make('path', { d: 'M 0 0 L 6 3 L 0 6 z', fill: '#485563' }));
+      defs.append(arrow);
+      svg.append(defs);
+
+      for (let x = 0; x <= width; x += gridStep) {
+        svg.append(make('line', { class: x === 0 ? 'axis' : 'grid', x1: x, y1: 0, x2: x, y2: height }));
+        const label = make('text', { class: 'tick', x, y: height + 5 }); label.textContent = x; svg.append(label);
+      }
+      for (let y = 0; y <= height; y += gridStep) {
+        svg.append(make('line', { class: y === 0 ? 'axis' : 'grid', x1: 0, y1: y, x2: width, y2: y }));
+        const label = make('text', { class: 'tick', x: -4, y: y + .8 }); label.textContent = height - y; svg.append(label);
+      }
+
+      directedRoads = new Set(roads.map(road => `${road.from}-${road.to}`));
+      const roadPairs = new Map();
+      roads.forEach(road => {
+        const key = [road.from, road.to].sort((a, b) => a - b).join('-');
+        if (!roadPairs.has(key)) roadPairs.set(key, []);
+        roadPairs.get(key).push(road);
+      });
+      roadPairs.forEach(pair => {
+        const bidirectional = pair.length > 1;
+        pair.forEach(road => {
+          const start = point(byId.get(road.from));
+          const end = point(byId.get(road.to));
+          const lane = lanePoints(road, start, end);
+          svg.append(make('line', { class: 'road', x1: lane.from.x, y1: lane.from.y, x2: lane.to.x, y2: lane.to.y }));
+          addDirectionMarkers(lane.from, lane.to);
+        });
+        if (bidirectional) {
+          const first = pair[0];
+          const start = point(byId.get(first.from));
+          const end = point(byId.get(first.to));
+          svg.append(make('line', { class: 'centerline', x1: start.x, y1: start.y, x2: end.x, y2: end.y }));
+        }
+      });
+
+      nodes.forEach(node => {
+        const p = point(node);
+        svg.append(make('circle', { class: 'node', cx: p.x, cy: p.y, r: 2 }));
+        const label = make('text', { class: 'node-label', x: p.x, y: p.y + .15 }); label.textContent = node.id; svg.append(label);
+      });
+      vehiclesLayer = make('g', { id: 'vehicles' });
+      svg.append(vehiclesLayer);
+      renderFrame();
+    }
+
+    async function reloadNetwork() {
+      try {
+        const [intersections, roads] = await Promise.all([
+          fetch(`data/intersections.csv?${Date.now()}`).then(response => response.text()),
+          fetch(`data/roads.csv?${Date.now()}`).then(response => response.text())
+        ]);
+        const fingerprint = intersections + roads;
+        if (fingerprint !== lastNetwork) {
+          draw(parseCsv(intersections), parseCsv(roads));
+          lastNetwork = fingerprint;
+        }
+        status.className = traceNotice ? 'error' : '';
+        status.textContent = traceNotice || 'Reload network: OK';
+      } catch {
+        status.className = 'error';
+        status.textContent = 'Open page through bat file';
+      }
+    }
+
+    async function loadTrace() {
+      try {
+        const text = await fetch(`output/output.out?${Date.now()}`).then(response => response.text());
+        const trace = parseTrace(text);
+        frames = trace.frames;
+        traceNotice = trace.notice;
+        slider.max = frames.length - 1;
+        setFrame(0);
+        status.className = traceNotice ? 'error' : '';
+        status.textContent = traceNotice || 'Reloading';
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = `Cannot read output/output.out: ${error.message}`;
+      }
+    }
+
+    previous.addEventListener('click', () => { stop(); setFrame(currentFrame - 1); });
+    next.addEventListener('click', () => { stop(); setFrame(currentFrame + 1); });
+    slider.addEventListener('input', () => { stop(); setFrame(Number(slider.value)); });
+    run.addEventListener('click', () => {
+      if (!frames.length || currentFrame === frames.length - 1) setFrame(0);
+      running = setInterval(() => {
+        if (currentFrame === frames.length - 1) return stop();
+        setFrame(currentFrame + 1);
+      }, 100);
+      run.disabled = true;
+      pause.disabled = false;
+    });
+    pause.addEventListener('click', stop);
+
+    reloadNetwork();
+    loadTrace();
+    setInterval(reloadNetwork, 1000);
+  </script>
+</body>
+</html>

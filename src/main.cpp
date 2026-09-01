@@ -8,20 +8,28 @@
 #include <queue>
 #include <deque>
 #include <random>
+#include <algorithm>
+#include <iomanip>
 
 #define CAR_LENGTH 1
-#define SAFETY_GAP 1
+#define SAFETY_GAP 1.5f
 #define INF 1e9
 #define steps 1000
-# define maxcars 100
+#define maxcars 400
+#define correction 1e-6
 
 using namespace std;
 
 
+string outputFileName = string(PROJECT_PATH) + "/output/output.out";
+ofstream g(outputFileName);
+
 struct node //intersection
 {
  int x,y;
+ int externalSpeed;//the speed of vehicles that have this intersection as its origin
  int id;
+ 
 };
 
 struct line // road
@@ -42,6 +50,8 @@ struct vehicle
     float waitTime; // Time the vehicle has been waiting at the intersection
     float spawnTime; // Time the vehicle was spawned
     int lcar; //length of the car
+    bool isActive;
+    int lastStepProcessed;
     //speed is the road's maxspeed
     
 };
@@ -70,9 +80,9 @@ public:
 
     }
 
-    void addNode(int x, int y, int id)
+    void addNode(int x, int y, int externalSpeed,int id)
        {
-        nodes.push_back({x,y,id});
+        nodes.push_back({x,y,externalSpeed,id});
         nodeIndexMap[id] = nodes.size()-1; // store the position of the intersection in the vector
         if(adjList.size() <= id)
         {
@@ -90,7 +100,7 @@ public:
     void readIntersections(const string& fileName)
     {
         ifstream file(fileName);
-        string csvLine, x, y, id;
+        string csvLine, x, y, externalSpeed,id;
 
         getline(file, csvLine); // antet: x,y,id
 
@@ -99,18 +109,18 @@ public:
 
             getline(stream, x, ',');
             getline(stream, y, ',');
+            getline(stream,externalSpeed,',');
             getline(stream, id, ',');
             int idi=stoi(id);
-
+           
             if (nodeIndexMap.find(idi) != nodeIndexMap.end()) {
                 cout << "Duplicate intersection id found: " << idi << "; Terminating progam.\n";
                 exit(1);
             }
 
-            addNode(stoi(x), stoi(y), stoi(id));
+            addNode(stoi(x), stoi(y), stoi(externalSpeed),stoi(id));
         }
     }
-
 
     void getShortestPath(vector<vector<int>> &a, vector<vector<int>> &b, int source, int destination, int &x)//calculates the successors
     {
@@ -266,6 +276,12 @@ public:
    {
     return nodes.size();
    }
+
+   int getNoRoads()
+   {
+    return lines.size();
+
+   }
 };
 
 class Simulation
@@ -277,15 +293,17 @@ class Simulation
   float tstep; // time step for the simulation
   vector<vector<int>> shortPaths; // 2D vector to store shortest paths between intersections
   vector<int> originWeights,destinationWeights;
-  int seed;
-  discrete_distribution<int> chooseOrigin,chooseDestination;  
-  mt19937 rng;
+  discrete_distribution<int> chooseOrigin,chooseDestination;
+  mt19937 rng; // generate random number from seed
+  vector<queue<int>> waitQueues;
+  vector<deque<int>> trafficQueues;
+  vector<float> nextAllowedEntry; // vector to store the next allowed entry time for each intersection
 
  public:
   Simulation(int seedValue)
-    :seed(seedValue), rng(seedValue)
+    :rng(seedValue)
     {}
- 
+
   void readCity()
   {
     city.readIntersections(string(PROJECT_PATH) + "/data/intersections.csv");
@@ -311,16 +329,27 @@ class Simulation
   {
     chooseOrigin = discrete_distribution<int>(originWeights.begin(), originWeights.end());
     chooseDestination=discrete_distribution<int>(destinationWeights.begin(),destinationWeights.end());
+    waitQueues.resize(city.getNoIntersections());
+    trafficQueues.resize(city.getNoRoads());
     vehicles.resize(maxcars);
+    nextAllowedEntry.resize(city.getNoIntersections(), 0.0f);
+
     for(int i=0; i<maxcars; i++)
     {
       vehicle v;
+      v.lastStepProcessed=-1;
       v.destinationIntersectionId=chooseDestination(rng);
       v.currentIntersectionId=chooseOrigin(rng);
       while(v.currentIntersectionId==v.destinationIntersectionId) v.currentIntersectionId=chooseOrigin(rng);
+      
+      waitQueues[v.currentIntersectionId].push(i);
+
+      node currentIntersection=city.getIntersection(v.currentIntersectionId);
+
       v.positionOnRoad=0;
       v.id=i;
-      v.spawnTime=0.1f*i;
+      v.spawnTime=(waitQueues[v.currentIntersectionId].size()-1) * (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;
+      v.isActive=v.waitTime=0;
       vehicles[i] = v;
 
     }
@@ -333,64 +362,139 @@ class Simulation
       v.currentIntersectionId=chooseOrigin(rng);
       while(v.currentIntersectionId==v.destinationIntersectionId) v.currentIntersectionId=chooseOrigin(rng);
       v.positionOnRoad=0;
-      v.spawnTime=ctime+1;
-     
+      if(!waitQueues[v.currentIntersectionId].empty()) {v.spawnTime=max(ctime+tstep, vehicles[waitQueues[v.currentIntersectionId].back()].spawnTime + (CAR_LENGTH + SAFETY_GAP) / city.getIntersection(v.currentIntersectionId).externalSpeed);}
+      else v.spawnTime=ctime+tstep;
+      waitQueues[v.currentIntersectionId].push(v.id);
+      v.lastStepProcessed=-1;
+      v.isActive=0;
+      v.waitTime=0;
 
   }
 
-  void oneStep() // de schimbat si in cazul in care vehiculul nu apare la multiplu de tstep
+  void oneStep(int step) 
   {
-      cout << ctime << '\n';
-     for(int i=0; i<vehicles.size(); i++)
+    
+      
+      for(int i=0; i<city.getNoRoads(); i++)
+      {
+        float nextAdvance=-1;
+        int status=0; // 0 first vehicle, unitialized, 1 moved freely without reaching the end, 2 reached the end while moving, could not exit , 3 exited the road
+        for(int j=0; j<trafficQueues[i].size(); j++)
         {
-         int ok=0;   
-         vehicle v=vehicles[i];  
+        
+        
+        line currentRoad=city.getLine(i);
+
+ 
+         vehicle &v=vehicles[trafficQueues[i][j]];
+         if(v.lastStepProcessed==step) continue;
+         
+         v.lastStepProcessed=step;
+         if(status==0 || status>=2)
+         {
+         
+          nextAdvance=v.positionOnRoad;
+        
+          if(status == 0 || status == 3)  v.positionOnRoad += tstep * currentRoad.maxspeed / currentRoad.lg;
+          else  
+               if(tstep * currentRoad.maxspeed / currentRoad.lg < vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg-v.positionOnRoad )  {v.positionOnRoad += tstep * currentRoad.maxspeed / currentRoad.lg;status=1;}
+               else {v.positionOnRoad = vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg; status=2;}
+
+         nextAdvance=v.positionOnRoad-nextAdvance;
+
+         if(v.positionOnRoad >=1)
+            {
+              
+             if(currentRoad.to == v.destinationIntersectionId) 
+              {
+                    status=3; // out of road
+                    reinitializeVehicle(vehicles[trafficQueues[i][j]]);
+                    trafficQueues[i].pop_front();
+                    j--; 
+              } 
+             else
+               {
+                float ftime= (v.positionOnRoad - 1) * currentRoad.lg / currentRoad.maxspeed;
+                v.positionOnRoad=1; 
+                status=2;//attempts to reach the next road
+                currentRoad= city.getLine(shortPaths[currentRoad.to][v.destinationIntersectionId]);
+                if(!trafficQueues[currentRoad.id].size() || vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg >= CAR_LENGTH+SAFETY_GAP)
+                {
+                    v.currentRoadId=currentRoad.id;
+                    v.currentIntersectionId=currentRoad.from;
+                    
+                    
+                    if(trafficQueues[currentRoad.id].size()) v.positionOnRoad = min(ftime * currentRoad.maxspeed / currentRoad.lg, vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg);
+                    else  v.positionOnRoad=ftime * currentRoad.maxspeed / currentRoad.lg;
+
+                    trafficQueues[currentRoad.id].push_back(v.id);
+                    trafficQueues[i].pop_front();
+                    status=3; // reached the next road and exited the current road
+                    j--; 
+                 }
+                
+               }
+            
+            }
+ 
+           }
+           else v.positionOnRoad+=nextAdvance; // moving freely, but not reaching the enf of the road (status == 1)
+          }
+
+
+      }
+     
+      for(int i=0; i<waitQueues.size(); i++)
+        {
+         bool ok=1;
+         while(ok && !waitQueues[i].empty())
+         {
+         ok=0;
+         vehicle &v=vehicles[waitQueues[i].front()];  
          v.currentRoadId = shortPaths[v.currentIntersectionId][v.destinationIntersectionId]; 
          line currentRoad = city.getLine(v.currentRoadId);
-         
-         if(v.spawnTime < ctime && ctime-v.spawnTime > 1e-5)
-            {
-              ok=1;
-              v.positionOnRoad += tstep * currentRoad.maxspeed / currentRoad.lg;
-              
-              if(v.positionOnRoad >=1)
-              {
-                
-                if(currentRoad.to == v.destinationIntersectionId) 
-                {
-                    node i1 = city.getIntersection(v.currentIntersectionId);
-                    node i2 = city.getIntersection(currentRoad.to);
-                    cout << v.id << ", roadid: " << currentRoad.id << ": " << i2.x << "/" << i2.y << '\n'; 
-                    ok=0; 
-                    reinitializeVehicle(vehicles[i]);
-                } // to be implemented for large number of vehicles that appear and disappear
-                else
-                {
-                float ftime= (v.positionOnRoad - 1) * currentRoad.lg / currentRoad.maxspeed;
-                    
-                v.currentIntersectionId= currentRoad.to;
-                currentRoad = city.getLine(shortPaths[v.currentIntersectionId][v.destinationIntersectionId]);
-                
-                v.positionOnRoad = ftime * currentRoad.maxspeed / currentRoad.lg;
-                
-                }
+         node currentIntersection = city.getIntersection(v.currentIntersectionId);
 
-              }
-            }   
-         
+        //if the vehicle has not yet left the waiting queue
         
-     if(ok){   
-            node i1= city.getIntersection(v.currentIntersectionId);
-            node i2 = city.getIntersection(currentRoad.to);
+        if(nextAllowedEntry[v.currentIntersectionId] < v.spawnTime) nextAllowedEntry[v.currentIntersectionId] = v.spawnTime;
+        
+        if(ctime >= v.spawnTime && ctime >= nextAllowedEntry[v.currentIntersectionId] && (!trafficQueues[currentRoad.id].size() || vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg + correction >= CAR_LENGTH+SAFETY_GAP))
+                {
+                 ok=1;   
+                 v.isActive=1;
+                 
+                 
+                 trafficQueues[currentRoad.id].push_back(v.id);
+                 if(trafficQueues[currentRoad.id].size() == 1) v.positionOnRoad=(ctime-nextAllowedEntry[v.currentIntersectionId]) * currentRoad.maxspeed / currentRoad.lg;
+                 else v.positionOnRoad = min(vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-2]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg, (ctime-nextAllowedEntry[v.currentIntersectionId]) * currentRoad.maxspeed / currentRoad.lg);
+                
+                 v.waitTime = nextAllowedEntry[v.currentIntersectionId]-v.spawnTime;  
+                 waitQueues[v.currentIntersectionId].pop();  
+                 nextAllowedEntry[v.currentIntersectionId]+= (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;   
+                }  
+        else if(ctime >= v.spawnTime && ctime >= nextAllowedEntry[v.currentIntersectionId] && trafficQueues[currentRoad.id].size() && vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg + correction < CAR_LENGTH+SAFETY_GAP)
+            nextAllowedEntry[v.currentIntersectionId]+=tstep;    
+        }   
+        } 
          
-            cout << v.id << ", roadid: " << currentRoad.id <<  ": " << i1.x * (1-v.positionOnRoad) + i2.x * v.positionOnRoad << "/" << i1.y * (1-v.positionOnRoad) + i2.y * v.positionOnRoad << '\n';
-               
-            vehicles[i]=v; 
+     
+    cout << step << '\n';    
+    int nr=0;
+    for(int i=0; i<vehicles.size(); i++)
+        if(vehicles[i].isActive) nr++;
+    
+    g << nr << '\n';
+    
+    for(int i=0; i<vehicles.size(); i++)
+    if(vehicles[i].isActive)
+        {
+            vehicle v=vehicles[i];
+            line r=city.getLine(v.currentRoadId);
+  
+            g << v.id << " " << v.currentIntersectionId << " " << r.to << " " << v.currentRoadId << " " << v.positionOnRoad << '\n';
         }
-         
-        
-        
-        }
+    
     ctime+=tstep;    
     
   }
@@ -438,19 +542,25 @@ class Simulation
 
 int main() {
    
-   Simulation sim(42);
+   Simulation sim(100);
    
    
    sim.readCity();
-   sim.setTime(0.0f,0.1f);
+   sim.setTime(0.0f,0.1f); // tstep must be lower than the time it takes for a vehicle to travel the length of the shortest road at its maximum speed
    sim.initializeShortestPaths();
    sim.initializeWeights(string(PROJECT_PATH) + "/data/demand.csv");
    
    sim.initializeVehicles();
-    
+
+    if (!g.is_open()) {
+    cerr << "Can't open output.out\n";
+    return 1;
+}
+   g << steps << '\n';
    for(int i=1; i<=steps; i++)
     {
-        sim.oneStep();
+        sim.oneStep(i);
+
     }
     
     return 0;
