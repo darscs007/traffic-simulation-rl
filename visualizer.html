@@ -1,3 +1,5 @@
+<!-- const useRawVehiclePositions -->
+<!--const vehicleStartInset, const vehicleEndpointInset to change vehicle insets  -->>
 <!doctype html>
 <html lang="en">
 <head>
@@ -24,9 +26,13 @@
     button:disabled { opacity: .45; cursor: default; }
     input[type="range"] { flex: 1 1 240px; }
     .frame { min-width: 120px; font-variant-numeric: tabular-nums; color: #475467; font-size: 14px; }
-    .vehicle { fill: #6ad920; stroke: #096d12; stroke-width: .05; }
+    .vehicle { fill: #243eaf; stroke: #73b9e2; stroke-width: .05; }
     .vehicle-label { fill: #fff; font-size: 1px; text-anchor: middle; dominant-baseline: middle; font-weight: 700; }
     .error { color: #b42318; }
+    .road-label {fill: #fff;font-size: 1.2px;text-anchor: middle;dominant-baseline: middle;font-weight: 600;}
+    .green-phase { fill: #22c55e; stroke: #dcfce7; stroke-width: .08; paint-order: stroke; font-size: 3px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; filter: url(#green-glow); }
+    .external-green { fill: none; stroke: #22c55e; stroke-width: .6; filter: url(#green-glow); }
+    .external-label { fill: #22c55e; font-size: .8px; text-anchor: middle; font-weight: 700; filter: url(#green-glow); }
   </style>
 </head>
 <body>
@@ -64,6 +70,9 @@
     let roadsById = new Map();
     let directedRoads = new Set();
     const laneSeparation = 2.2;
+    const useRawVehiclePositions = false;
+    const vehicleStartInset = 0.5;
+    const vehicleEndpointInset = 2.9;
 
     const make = (tag, attrs = {}) => {
       const el = document.createElementNS(ns, tag);
@@ -87,14 +96,18 @@
       const result = [];
       for (let frame = 0; frame < numberOfFrames; frame++) {
         if (cursor >= lines.length) return { frames: result, notice: `Trace incomplete: ${result.length} of ${numberOfFrames} steps.` };
+        const phases = lines[cursor++].split(/\s+/).map(Number);
+        if (!phases.length || phases.some(Number.isNaN)) throw new Error(`Invalid traffic-light phase data at step ${frame}`);
+        if (cursor >= lines.length) return { frames: result, notice: `Trace incomplete: ${result.length} of ${numberOfFrames} steps.` };
         const count = Number(lines[cursor++]);
+        if (!Number.isInteger(count) || count < 0) throw new Error(`Invalid vehicle count at step ${frame}`);
         if (cursor + count > lines.length) return { frames: result, notice: `Trace incomplete: ${result.length} of ${numberOfFrames} steps.` };
         const vehicles = [];
         for (let i = 0; i < count; i++) {
           const [id, from, to, roadId, position] = lines[cursor++].trim().split(/\s+/).map(Number);
           vehicles.push({ id, from, to, roadId, position });
         }
-        result.push(vehicles);
+        result.push({ phases, vehicles });
       }
       if (cursor !== lines.length) throw new Error('Additional data in output.out');
       return { frames: result, notice: '' };
@@ -103,15 +116,17 @@
     function renderFrame() {
       if (!vehiclesLayer || !frames.length) return;
       vehiclesLayer.replaceChildren();
-      frames[currentFrame].forEach(vehicle => {
+      const frame = frames[currentFrame];
+      drawTrafficLightPhases(frame.phases);
+      frame.vehicles.forEach(vehicle => {
         const road = roadsById.get(vehicle.roadId);
         if (!road) return;
         const from = nodesById.get(road.from);
         const to = nodesById.get(road.to);
         const start = { x: from.x, y: mapHeight - from.y };
         const end = { x: to.x, y: mapHeight - to.y };
-        const position = Math.max(0, Math.min(1, vehicle.position));
         const lane = lanePoints(road, start, end);
+        const position = visualRoadPosition(lane, vehicle.position);
         const x = lane.from.x * (1 - position) + lane.to.x * position;
         const y = lane.from.y * (1 - position) + lane.to.y * position;
         vehiclesLayer.append(make('circle', { class: 'vehicle', cx: x, cy: y, r: 1}));
@@ -120,7 +135,7 @@
         vehiclesLayer.append(label);
       });
       slider.value = currentFrame;
-      frameLabel.textContent = `Step ${currentFrame} / ${frames.length - 1} (${frames[currentFrame].length} vehicles)`;
+      frameLabel.textContent = `Step ${currentFrame} / ${frames.length - 1} (${frame.vehicles.length} vehicles)`;
       previous.disabled = currentFrame === 0;
       next.disabled = currentFrame === frames.length - 1;
     }
@@ -148,6 +163,57 @@
         from: { x: from.x + offsetX, y: from.y + offsetY },
         to: { x: to.x + offsetX, y: to.y + offsetY }
       };
+    }
+
+    function visualRoadPosition(lane, positionOnRoad) {
+      if (useRawVehiclePositions) return Math.max(0, Math.min(1, positionOnRoad));
+      const laneLength = Math.hypot(lane.to.x - lane.from.x, lane.to.y - lane.from.y);
+      const startInset = Math.min(vehicleStartInset / laneLength, .2);
+      const endpointInset = Math.min(vehicleEndpointInset / laneLength, .45);
+      return startInset + Math.max(0, Math.min(1, positionOnRoad)) * (1 - startInset - endpointInset);
+    }
+
+    function drawTrafficLightPhases(phases) {
+      phases.forEach((roadId, intersectionId) => {
+        const intersection = nodesById.get(intersectionId);
+        if (!intersection) return;
+        const nodePoint = { x: intersection.x, y: mapHeight - intersection.y };
+
+        if (roadId === -2) {
+          vehiclesLayer.append(make('circle', {
+            class: 'external-green', cx: nodePoint.x, cy: nodePoint.y, r: 1.35
+          }));
+          const label = make('text', {
+            class: 'external-label', x: nodePoint.x, y: nodePoint.y + 1.15
+          });
+          label.textContent = 'ext';
+          vehiclesLayer.append(label);
+          return;
+        }
+
+        const road = roadsById.get(roadId);
+        if (!road || road.to !== intersectionId) return;
+        const from = nodesById.get(road.from);
+        if (!from) return;
+        const lane = lanePoints(road, { x: from.x, y: mapHeight - from.y }, nodePoint);
+        const dx = lane.to.x - lane.from.x;
+        const dy = lane.to.y - lane.from.y;
+        const length = Math.hypot(dx, dy);
+        if (!length) return;
+        const stopLinePosition = 1 - Math.min(2 / length, .1);
+        const markerPosition = stopLinePosition;
+        const markerX = lane.from.x * (1 - markerPosition) + lane.to.x * markerPosition;
+        const markerY = lane.from.y * (1 - markerPosition) + lane.to.y * markerPosition;
+        const roadAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+        const marker = make('text', {
+          class: 'green-phase',
+          x: markerX,
+          y: markerY,
+          transform: `rotate(${roadAngle} ${markerX} ${markerY})`
+        });
+        marker.textContent = ')';
+        vehiclesLayer.append(marker);
+      });
     }
 
     function addArrow(from, to, fraction) {
@@ -185,6 +251,9 @@
       const point = node => ({ x: node.x, y: height - node.y });
 
       const defs = make('defs');
+      const greenGlow = make('filter', { id: 'green-glow', x: '-100%', y: '-100%', width: '300%', height: '300%' });
+      greenGlow.append(make('feDropShadow', { dx: '0', dy: '0', stdDeviation: '.45', 'flood-color': '#22c55e', 'flood-opacity': '.9' }));
+      defs.append(greenGlow);
       const arrow = make('marker', { id: 'arrow', viewBox: '0 0 6 6', refX: '5.4', refY: '3', markerWidth: '3', markerHeight: '3', orient: 'auto' });
       arrow.append(make('path', { d: 'M 0 0 L 6 3 L 0 6 z', fill: '#485563' }));
       defs.append(arrow);
@@ -214,6 +283,16 @@
           const lane = lanePoints(road, start, end);
           svg.append(make('line', { class: 'road', x1: lane.from.x, y1: lane.from.y, x2: lane.to.x, y2: lane.to.y }));
           addDirectionMarkers(lane.from, lane.to);
+          const labelX = (lane.from.x + lane.to.x) / 2;
+          const labelY = (lane.from.y + lane.to.y) / 2;
+
+          const label = make('text', {
+          class: 'road-label',
+          x: labelX,
+          y: labelY
+          });
+label.textContent = road.id;
+svg.append(label);
         });
         if (bidirectional) {
           const first = pair[0];
