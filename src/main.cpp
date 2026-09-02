@@ -124,7 +124,13 @@ public:
 
     void getShortestPath(vector<vector<int>> &a, vector<vector<int>> &b, int source, int destination, int &x)//calculates the successors
     {
-      if(source == destination || b[source][destination]!=-1) return;
+      if(source == destination) return;
+
+      if(b[source][destination] != -1) 
+        {
+         x=b[source][destination]; 
+         return;
+        }
         
         
       if(lines[a[source][destination]].from==source)  x=a[source][destination];
