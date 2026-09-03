@@ -2,8 +2,8 @@
 
 A C++20 prototype for simulating traffic on a directed road network. The
 simulator reads a city graph and demand weights from CSV files, precomputes
-routes, generates vehicles, models queues and safe longitudinal movement, and
-writes a frame-by-frame trace that can be explored in a lightweight browser
+routes, generates vehicles, models queues, safe longitudinal movement and
+traffic-light phases, then writes a frame-by-frame trace for a browser
 visualizer.
 
 ## What is implemented
@@ -16,6 +16,11 @@ visualizer.
   distributions. A vehicle is resampled while origin equals destination.
 - External waiting queue at every intersection, with scheduled spawning and a
   minimum entry headway based on `CAR_LENGTH + SAFETY_GAP`.
+- One traffic light per intersection. Its phases serve, in turn, the external
+  queue and every directed road that enters that intersection. The phase for
+  the external queue has the special road ID `-2`.
+- Fixed-duration traffic-light phases (`defaultGreenSteps`), recorded in every
+  frame and rendered by the visualizer.
 - One `deque` per directed road. The front vehicle is closest to the road exit;
   the back vehicle is closest to the entry.
 - Safe car-following movement: a vehicle cannot advance beyond the required
@@ -26,15 +31,23 @@ visualizer.
   step (`lastStepProcessed`).
 - Vehicle reinitialization after reaching its destination, followed by a new
   origin/destination assignment and placement in an external waiting queue.
+  Reinitialization is deferred until the end of the step, so the same vehicle
+  cannot be processed again in that step.
+- Per-step moving/stationary vehicle statistics, both as whole-vehicle counts
+  and as fractions of a time step.
+- Completed-trip delay statistics for the external queue, the internal road
+  network, and the complete trip.
 - A browser visualizer with step controls, a slider, automatic playback,
-  directed-road arrows, and separate lanes for two-way roads.
+  directed-road arrows, separate lanes for two-way roads, traffic-light phase
+  markers, and a fixed statistics panel.
 
 ## Current model and limits
 
 The model has one lane per directed road. A pair of opposite directed roads is
-drawn as a two-way road by the visualizer, but lane selection, turning lanes,
-traffic lights, intersection occupancy, and conflict resolution between
-movements are not modeled yet.
+drawn as a two-way road by the visualizer. At an intersection, one incoming
+road or the external queue has green in the current phase. It does not yet
+model multiple lanes, turning lanes, pedestrians, yellow/all-red intervals,
+or simultaneous non-conflicting movements.
 
 Roads are processed in index order. Consequently, a vehicle can be denied
 entry to a target road that becomes free later in the same time step. This is
@@ -44,6 +57,11 @@ The route precomputation currently uses repeated Dijkstra-style searches with
 linear minimum selection. It is suitable for the small example network but
 should be replaced with `priority_queue` Dijkstra before scaling to large
 networks.
+
+Traffic-light durations are currently static and equal for all phases. This is
+intentional as a baseline for later adaptive and reinforcement-learning
+controllers; those controllers should change phase selection/duration, not the
+vehicle-movement rules.
 
 ## Repository layout
 
@@ -179,27 +197,102 @@ These constants are currently defined at the top of `src/main.cpp`:
 | Setting | Value |
 | --- | ---: |
 | Number of simulated vehicles | `400` |
-| Number of time steps | `1000` |
+| Number of time steps | `2000` |
 | Time-step duration | `0.1` |
 | Vehicle length | `1` |
 | Safety gap | `1.5` |
+| Green duration per phase | `30` steps |
 | Random seed | `100` |
 
 The fixed seed makes runs deterministic while the input data and constants are
 unchanged.
 
+## Statistics
+
+### Per-step movement
+
+Each frame contains four movement values:
+
+| Field | Meaning |
+| --- | --- |
+| `MovingVehiclesNo` | Number of vehicles that moved by a meaningful positive amount during this step. A vehicle that reaches its destination is also counted as moving. |
+| `StationaryVehiclesNo` | Number of vehicles that did not move during this step. |
+| `fMovingNo` | Sum of the fractions of the time step during which vehicles moved. For example, a vehicle moving for half of the step contributes `0.5`. |
+| `fStationaryNo` | Sum of the complementary stationary fractions of the time step. |
+
+The integer fields answer “how many vehicles moved at all?”, while the
+fractional fields preserve partial movement within a step. When a vehicle
+finishes a trip before the end of the step, its remaining time is not counted
+as motion for that completed trip; therefore the fractional totals are not
+required to equal the active-vehicle count exactly.
+
+### Completed-trip delay
+
+Statistics are updated when a vehicle reaches its destination. For a trip:
+
+| Segment | Expected time | Actual time |
+| --- | --- | --- |
+| External | `expectedExternalTime` | `actualSpawnTime - initTime` |
+| Internal | shortest-path time from `timeMatrix` | `endTime - actualSpawnTime` |
+| Total | external expected + internal expected | `endTime - initTime` |
+
+`expectedExternalTime` is a free-flow queue baseline: the number of vehicles
+already ahead of the vehicle, multiplied by the entry headway. The internal
+expected time is the shortest free-flow travel time, using `length / maxspeed`
+for each road. Thus, a ratio of `1.25` means the actual time was 25% above its
+expected baseline.
+
+For each of the external, internal, and total segments, the trace stores two
+different aggregates:
+
+| Aggregate | Formula | Interpretation |
+| --- | --- | --- |
+| Average vehicle | `sum(actual_i / expected_i) / N` | Typical completed vehicle: every trip has equal weight. |
+| Time-weighted | `sum(actual_i) / sum(expected_i)` | Global delay: trips with larger expected durations have proportionally more weight. |
+
+Both are useful and neither replaces the other. The average-vehicle value is
+better for describing what a typical driver experiences; the time-weighted
+value is better for the overall travel-time burden of the system. Trip metrics
+are emitted only after completed trips exist. Initial vehicles with an initial
+`spawnTime` of zero are excluded by the current implementation, because their
+external expected time can be zero.
+
+The visualizer displays these six ratios as percentages. Up to 150% is green,
+150–250% is yellow, and over 200% is red. These colours are display thresholds,
+not additional simulation rules.
+
 ## Trace format
 
 `output/output.out` is a whitespace-delimited trace, despite the `.out`
-extension. Its first line is the number of frames. Each frame then contains the
-number of active vehicles followed by one row per active vehicle:
+extension. Its first line is the number of frames. Each frame contains, in
+order:
+
+1. Completed-trip count and six trip ratios, or `completed_trip_count 0` when
+   no trip data exists yet.
+2. The four per-step movement values.
+3. One traffic-light phase ID per intersection. `-2` means that intersection's
+   external queue has green; any non-negative ID is the incoming road with
+   green.
+4. The active-vehicle count.
+5. One record per active vehicle.
+
+For example, the initial frame may look like this:
 
 ```text
-1000
+2000
+0 0
+0 0 0 0
+-2 -2 -2 -2
 5
 0 2 1 5 0.03
 1 4 5 14 0.05
 ...
+```
+
+When trip data exists, its first frame line has seven fields:
+
+```text
+completed_trips  avg_external  avg_internal  avg_total  weighted_external  weighted_internal  weighted_total
 ```
 
 Each vehicle row has:
@@ -215,8 +308,11 @@ also useful for checking trace consistency.
 
 ## Next development steps
 
-- Replace the all-pairs route precomputation with priority-queue Dijkstra.
-- Add traffic-light phases and intersection movement conflicts.
-- Model multiple lanes and turning movements.
+- Individualize the drivers: different preferred velocities, may be prone to changing paths when the most efficient one is full
+- Implement adaptive traffic lights that attribute green light time to the most packed roads
+- Replace the all-pairs route precomputation with priority-queue Dijkstra and make 
 - Use a synchronized transfer/reservation phase to remove road-order effects.
 - Add automated tests for route validity, queue spacing, and trace format.
+- Implement and compare static, demand-adaptive, and reinforcement-learning
+  traffic-light controllers using the recorded metrics.
+- Implement complex intersetions and multiple traffic lanes per road
