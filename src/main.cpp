@@ -14,13 +14,13 @@
 #define CAR_LENGTH 1
 #define SAFETY_GAP 1.5f
 #define INF 1e9
-#define steps 2000
+#define steps 4000
 #define maxcars 400
 #define correction 1e-6
 #define defaultGreenSteps 20
 #define minGreenSteps 10
 #define externalRoadId -2
-#define detectionRadius 30
+#define detectionRadius 28
 #define isAdaptive 1
 #define seed 100
 
@@ -544,7 +544,7 @@ class Simulation
             for(int e=1; e < trafficLights[i].roadChangeMatrix[j].size(); e++)
             {
             int outgoingRoadId= city.getAdjRoads(i)[e-1];
-            trafficLights[i].roadsTL[j].availability+= (float) trafficLights[i].roadChangeMatrix[j][e] /sumP * (0.2f + 0.8f * (1.0f - clamp(trafficLights[city.getLine(outgoingRoadId).to].roadsTL[incomingPhaseId[outgoingRoadId]].score/maxscore,0.0f,1.0f))); 
+            trafficLights[i].roadsTL[j].availability+= (float) trafficLights[i].roadChangeMatrix[j][e] /sumP * (0.25f + 0.75f * (1.0f - clamp(trafficLights[city.getLine(outgoingRoadId).to].roadsTL[incomingPhaseId[outgoingRoadId]].score/maxscore,0.0f,1.0f))); 
             }
            }
          
