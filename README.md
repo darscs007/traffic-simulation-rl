@@ -19,8 +19,10 @@ visualizer.
 - One traffic light per intersection. Its phases serve, in turn, the external
   queue and every directed road that enters that intersection. The phase for
   the external queue has the special road ID `-2`.
-- Fixed-duration traffic-light phases (`defaultGreenSteps`), recorded in every
-  frame and rendered by the visualizer.
+- Configurable traffic-light controller: static equal-duration phases or an
+  adaptive controller, selected with the `isAdaptive` constant.
+- Adaptive green-time allocation based on local detector demand, observed turn
+  proportions, and the expected availability of downstream roads.
 - One `deque` per directed road. The front vehicle is closest to the road exit;
   the back vehicle is closest to the entry.
 - Safe car-following movement: a vehicle cannot advance beyond the required
@@ -58,10 +60,49 @@ linear minimum selection. It is suitable for the small example network but
 should be replaced with `priority_queue` Dijkstra before scaling to large
 networks.
 
-Traffic-light durations are currently static and equal for all phases. This is
-intentional as a baseline for later adaptive and reinforcement-learning
-controllers; those controllers should change phase selection/duration, not the
-vehicle-movement rules.
+Traffic-light durations can be static or adaptive. In both modes the phase
+order is fixed and exactly one incoming road (or the external queue) is green
+at an intersection. Adaptive control changes only phase durations; it does
+not change the vehicle-movement rules.
+
+### Adaptive traffic lights
+
+Set the constant at the top of `src/main.cpp` to choose the controller:
+
+```cpp
+#define isAdaptive 0  // static baseline: defaultGreenSteps for every phase
+#define isAdaptive 1  // connected adaptive controller
+```
+
+The adaptive controller preserves each signal's total cycle length:
+
+```text
+number of phases × defaultGreenSteps
+```
+
+Each phase first receives `minGreenSteps`. The remaining steps are distributed
+proportionally to its effective score:
+
+```text
+effectiveScore = detectorScore × expectedDownstreamAvailability
+```
+
+`detectorScore` is a distance-weighted count of vehicles within the detection
+radius of the intersection. Snapshots are collected globally every
+`defaultGreenSteps`, immediately before any cycle boundary that can use them.
+
+For each incoming phase, `roadChangeMatrix` records the observed outcomes:
+the virtual external exit (column `0`) or each outgoing road. These counts
+estimate turn probabilities. The expected downstream availability is their
+weighted average: an exiting vehicle contributes availability `1`, while a
+vehicle continuing on an outgoing road is discounted when that road's
+downstream detector is congested. Thus a phase with high local demand can
+still receive less green if it would probably feed a blocked road.
+
+For temporary inspection, `output/trafficlights.out` records, at each adaptive
+cycle update, the step, phase road ID, detector score, and expected downstream
+availability. It is a debug trace; `output/output.out` remains the trace used
+by the visualizer.
 
 ## Repository layout
 
@@ -76,7 +117,8 @@ vehicle-movement rules.
 |   |-- roads.csv               # Directed road segments
 |   `-- demand.csv              # Origin and destination weights
 |-- output/
-|   `-- output.out              # Generated simulation trace
+|   |-- output.out              # Generated simulation trace
+|   `-- trafficlights.out       # Adaptive-controller debug trace
 `-- src/
     `-- main.cpp
 ```
@@ -201,7 +243,9 @@ These constants are currently defined at the top of `src/main.cpp`:
 | Time-step duration | `0.1` |
 | Vehicle length | `1` |
 | Safety gap | `1.5` |
-| Green duration per phase | `30` steps |
+| Default green duration per phase | `20` steps |
+| Minimum adaptive green duration | `10` steps |
+| Adaptive controller enabled | `isAdaptive = 1` |
 | Random seed | `100` |
 
 The fixed seed makes runs deterministic while the input data and constants are
@@ -309,10 +353,9 @@ also useful for checking trace consistency.
 ## Next development steps
 
 - Individualize the drivers: different preferred velocities, may be prone to changing paths when the most efficient one is full
-- Implement adaptive traffic lights that attribute green light time to the most packed roads
-- Replace the all-pairs route precomputation with priority-queue Dijkstra and make 
+- Replace the all-pairs route precomputation with priority-queue Dijkstra and make code optimisations (time and memory)
 - Use a synchronized transfer/reservation phase to remove road-order effects.
 - Add automated tests for route validity, queue spacing, and trace format.
-- Implement and compare static, demand-adaptive, and reinforcement-learning
-  traffic-light controllers using the recorded metrics.
+- Compare static, simple demand-adaptive, connected adaptive, and
+  reinforcement-learning traffic-light controllers using the recorded metrics.
 - Implement complex intersetions and multiple traffic lanes per road
