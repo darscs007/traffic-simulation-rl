@@ -40,6 +40,7 @@
     .ratio-danger { border-color: #dc2626; color: #b91c1c; }
     .no-data { color: #667085; font-style: italic; }
     .vehicle { fill: #243eaf; stroke: #73b9e2; stroke-width: .05; }
+    .impatient-indicator { fill: #ef2020; stroke: #fff; stroke-width: .1; }
     .vehicle-label { fill: #fff; font-size: 1px; text-anchor: middle; dominant-baseline: middle; font-weight: 700; }
     .error { color: #b42318; }
     .road-label {fill: #fff;font-size: 1.2px;text-anchor: middle;dominant-baseline: middle;font-weight: 600;}
@@ -144,8 +145,15 @@
         if (cursor + count > lines.length) return { frames: result, notice: `Trace incomplete: ${result.length} of ${numberOfFrames} steps.` };
         const vehicles = [];
         for (let i = 0; i < count; i++) {
-          const [id, from, to, roadId, position] = lines[cursor++].trim().split(/\s+/).map(Number);
-          vehicles.push({ id, from, to, roadId, position });
+          const values = lines[cursor++].trim().split(/\s+/).map(Number);
+          if (values.length !== 6 || values.some(value => !Number.isFinite(value))) {
+            throw new Error(`Invalid vehicle entry in frame ${frame}. Expected 6 numeric values.`);
+          }
+          const [id, from, to, roadId, position, isImpatient] = values;
+          if (isImpatient !== 0 && isImpatient !== 1) {
+            throw new Error(`Invalid isImpatient value in frame ${frame}: ${isImpatient}.`);
+          }
+          vehicles.push({ id, from, to, roadId, position, isImpatient: isImpatient === 1 });
         }
         result.push({
           phases,
@@ -176,6 +184,11 @@
         const x = lane.from.x * (1 - position) + lane.to.x * position;
         const y = lane.from.y * (1 - position) + lane.to.y * position;
         vehiclesLayer.append(make('circle', { class: 'vehicle', cx: x, cy: y, r: 1}));
+        if (vehicle.isImpatient) {
+          vehiclesLayer.append(make('circle', {
+            class: 'impatient-indicator', cx: x + .62, cy: y - .62, r: .23
+          }));
+        }
         const label = make('text', { class: 'vehicle-label', x, y: y + .1 });
         label.textContent = vehicle.id;
         vehiclesLayer.append(label);
