@@ -99,6 +99,7 @@ private:
     unordered_map<int, int> lineIndexMap; // Map to store line id to index mapping
     vector<vector<int>> adjList; // Adjacency list to store the graph structure
     vector<vector<float>> timeMatrix;
+    vector<vector<int>> shortestPaths;
 public:
     line getLine(int id)
     {
@@ -248,10 +249,11 @@ public:
         }
     }
 
-   vector<vector<int>> initializeDijkstraShortestPaths()
+   void initializeDijkstraShortestPaths()
    {
     
-    vector<vector<int>> shortestPaths(nodes.size(), vector<int>(nodes.size(), -1)), successors(nodes.size(),vector<int>(nodes.size(), -1));
+    shortestPaths=vector<vector<int>> (nodes.size(), vector<int>(nodes.size(), -1));
+    vector<vector<int>> successors(nodes.size(),vector<int>(nodes.size(), -1));
 
    //dijkstra O(n^2) for each node, total O(n^3). I will optimize it later with a priority queue O(n^2 log n)
     for(int i=0;i<nodes.size();i++)
@@ -326,7 +328,7 @@ public:
         for(int j=0; j<nodes.size(); j++)
                getShortestPath(shortestPaths,successors,i,j,x);
 
-    return successors;
+    shortestPaths=successors;
    }
     
    int getNoIntersections()
@@ -356,6 +358,11 @@ public:
    {
     return timeMatrix[i][j];
    }
+
+   int getNextRoadBetween(int i, int j)
+   {
+    return shortestPaths[i][j];
+   }
 };
 
 class Simulation
@@ -365,7 +372,6 @@ class Simulation
   vector<vehicle> vehicles;
   float ctime; // current time of the simulation
   float tstep; // time step for the simulation
-  vector<vector<int>> shortPaths; // 2D vector to store shortest paths between intersections
   vector<int> originWeights,destinationWeights;
   discrete_distribution<int> chooseOrigin,chooseDestination;
   mt19937 rng; // generate random number from seed
@@ -445,8 +451,7 @@ class Simulation
 
   void initializeShortestPaths()
   {
-    shortPaths = city.initializeDijkstraShortestPaths();
-    city.showTimeMatrix();
+    city.initializeDijkstraShortestPaths();
     cout << "Shortest paths initialized successfully\n";
   }
 
@@ -729,7 +734,7 @@ class Simulation
                 ok++;
                 
                 int initialRoadId = currentRoad.id;
-                currentRoad= city.getLine(shortPaths[currentRoad.to][v.destinationIntersectionId]);
+                currentRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId));
                 if(!trafficQueues[currentRoad.id].size() || vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg >= CAR_LENGTH+SAFETY_GAP)
                 {
                     
@@ -773,7 +778,7 @@ class Simulation
                     {
                      line possibleRoad=city.getLine(adjRoads[i]);
                      if(currentRoad.id == adjRoads[i]) continue; //current road is, here, the next road in the initial path, it has been initialized before if
-                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(shortPaths[possibleRoad.to][v.destinationIntersectionId]).to == initRoad.to) continue;
+                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(city.getNextRoadBetween(possibleRoad.to,v.destinationIntersectionId)).to == initRoad.to) continue;
                      bool isNotForbidden=1;
                      for(int j=0; j<v.forbiddenRoads.size() && isNotForbidden; j++)
                        if(v.forbiddenRoads[j] == possibleRoad.id) isNotForbidden=0;
@@ -896,7 +901,7 @@ class Simulation
          bool changedPaths=0;
          ok=0;
          vehicle &v=vehicles[waitQueues[i].front()];  
-         v.currentRoadId = shortPaths[v.currentIntersectionId][v.destinationIntersectionId]; 
+         v.currentRoadId = city.getNextRoadBetween(v.currentIntersectionId,v.destinationIntersectionId); 
          line currentRoad = city.getLine(v.currentRoadId);
          node currentIntersection = city.getIntersection(v.currentIntersectionId);
          trafficLight tl=trafficLights[currentIntersection.id];  
@@ -957,7 +962,7 @@ class Simulation
                     {
                      line possibleRoad=city.getLine(adjRoads[i]);
                      if(v.currentRoadId == adjRoads[i]) continue;
-                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(shortPaths[possibleRoad.to][v.destinationIntersectionId]).to == v.currentIntersectionId) continue;
+                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(city.getNextRoadBetween(possibleRoad.to,v.destinationIntersectionId)).to == v.currentIntersectionId) continue;
                      bool isNotForbidden=1;
                      for(int j=0; j<v.forbiddenRoads.size() && isNotForbidden; j++)
                        if(v.forbiddenRoads[j] == possibleRoad.id) isNotForbidden=0;
@@ -1116,10 +1121,10 @@ class Simulation
   void showShortestPaths()
   {
     
-    for(int i=0; i< shortPaths.size(); i++)
+    for(int i=0; i< city.getNoIntersections(); i++)
     {
-        for(int j=0; j < shortPaths[i].size(); j++)
-          cout << shortPaths[i][j] <<  " ";
+        for(int j=0; j < city.getNoIntersections(); j++)
+          cout << city.getNextRoadBetween(i,j) <<  " ";
 
      cout << '\n';
 
