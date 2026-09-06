@@ -101,13 +101,13 @@ private:
     vector<vector<float>> timeMatrix;
     vector<vector<int>> shortestPaths;
 public:
-    line getLine(int id)
+    const line& getLine(int id) const
     {
         return lines[id];
 
     }
 
-    node getIntersection(int id)
+    const node& getIntersection(int id) const
     {
       return nodes[id];
 
@@ -268,7 +268,7 @@ public:
 
        for(int j=0; j<adjList[i].size(); j++)
             {
-            line cline=lines[adjList[i][j]];
+            const line& cline=lines[adjList[i][j]];
             d[cline.to]= (float)cline.lg / cline.maxspeed;
             shortestPaths[i][cline.to] = adjList[i][j];    
             }
@@ -291,7 +291,7 @@ public:
           f[x]=1;
           for(int j=0; j<adjList[x].size(); j++)
            {
-            line cline=lines[adjList[x][j]];
+            const line& cline=lines[adjList[x][j]];
             if(!f[cline.to] && d[cline.to] > d[x] + (float)cline.lg/cline.maxspeed)
                 {d[cline.to] = d[x] + (float)cline.lg/cline.maxspeed;
                  shortestPaths[i][cline.to] = adjList[x][j];
@@ -313,7 +313,7 @@ public:
              int dest=j;
              while(i!=dest)
              {
-               line currentRoad= getLine(shortestPaths[i][dest]);
+               const line& currentRoad= getLine(shortestPaths[i][dest]);
                toAdd+=(float) currentRoad.lg/ currentRoad.maxspeed;
 
                timeMatrix[currentRoad.from][j]=toAdd;
@@ -331,22 +331,22 @@ public:
     shortestPaths=successors;
    }
     
-   int getNoIntersections()
+   int getNoIntersections()const
    {
     return nodes.size();
    }
 
-   int getNoRoads()
+   int getNoRoads()const
    {
     return lines.size();
    }
 
-   vector<int> getAdjRoads(int id) // number of roads that start in the intersection with this id
+   const vector<int>& getAdjRoads(int id) const // number of roads that start in the intersection with this id
    {
     return adjList[id];
    }
 
-   void showTimeMatrix()
+   void showTimeMatrix()const
    {
     for(int i=0; i<timeMatrix.size(); i++)
         {for(int j=0; j<timeMatrix[i].size(); j++) cout << timeMatrix[i][j] << " ";
@@ -354,12 +354,12 @@ public:
         }
    }
 
-   float getTimeBetween(int i, int j)
+   float getTimeBetween(int i, int j)const
    {
     return timeMatrix[i][j];
    }
 
-   int getNextRoadBetween(int i, int j)
+   int getNextRoadBetween(int i, int j)const
    {
     return shortestPaths[i][j];
    }
@@ -413,11 +413,11 @@ class Simulation
     
     for(int i=0; i<city.getNoIntersections(); i++)
     {
-        vector<int> adjRoads=city.getAdjRoads(i);
+        const vector<int>& adjRoads=city.getAdjRoads(i);
         int ind=1;
         for(int j=0; j<adjRoads.size(); j++)
         {
-            line currentRoad=city.getLine(adjRoads[j]);
+            const line& currentRoad=city.getLine(adjRoads[j]);
             trafficLights[currentRoad.to].roadsTL.push_back({currentRoad.id,defaultGreenSteps});
             if(isAdaptive)
             {
@@ -476,7 +476,7 @@ class Simulation
       v.startIntersectionId=v.currentIntersectionId;
       waitQueues[v.currentIntersectionId].push(i);
 
-      node currentIntersection=city.getIntersection(v.currentIntersectionId);
+      const node& currentIntersection=city.getIntersection(v.currentIntersectionId);
 
       v.id=i;
       v.spawnTime=v.expectedExternalTime=(waitQueues[v.currentIntersectionId].size()-1) * (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;
@@ -653,13 +653,11 @@ class Simulation
         for(int j=0; j<trafficQueues[i].size(); j++)
         {
         bool changedPaths=0;    
-        line currentRoad=city.getLine(i);
+        const line &currentRoad=city.getLine(i);
         vehicle &v=vehicles[trafficQueues[i][j]];
 
          if(v.lastStepProcessed==step) continue;
          
-
-         line initRoad=currentRoad;
          float initPos=v.positionOnRoad; 
          bool didNotExit=1;
          
@@ -684,7 +682,7 @@ class Simulation
                 v.positionOnRoad = vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg; 
                 status=2;
    
-                trafficLight tl=trafficLights[currentRoad.to]; // patience
+                const trafficLight& tl=trafficLights[currentRoad.to]; // patience
                 if(tl.roadsTL[tl.currentState].roadId == currentRoad.id && (1-v.positionOnRoad)*currentRoad.lg <= vehicleDetectionRadius) 
                 {
                  ftime = clamp(ftime, 0.0f, tstep); 
@@ -699,7 +697,7 @@ class Simulation
             
          if(v.positionOnRoad >=1)
             {
-             trafficLight tl=trafficLights[currentRoad.to];
+             trafficLight& tl=trafficLights[currentRoad.to];
              
              if(currentRoad.to == v.destinationIntersectionId) 
               {
@@ -716,7 +714,7 @@ class Simulation
                     trafficQueues[i].pop_front();
                     j--;
 
-                    if(isAdaptive)trafficLights[v.destinationIntersectionId].roadChangeMatrix[incomingPhaseId[v.currentRoadId]][0]++;
+                    if(isAdaptive)tl.roadChangeMatrix[incomingPhaseId[v.currentRoadId]][0]++;
                     }
                    else 
                    {
@@ -733,32 +731,31 @@ class Simulation
                 {
                 ok++;
                 
-                int initialRoadId = currentRoad.id;
-                currentRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId));
-                if(!trafficQueues[currentRoad.id].size() || vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg >= CAR_LENGTH+SAFETY_GAP)
+                const line& targetRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId)); ////redeclarare current road
+                if(!trafficQueues[targetRoad.id].size() || vehicles[trafficQueues[targetRoad.id].back()].positionOnRoad * targetRoad.lg >= CAR_LENGTH+SAFETY_GAP)
                 {
                     
-                    v.currentRoadId=currentRoad.id;
-                    v.currentIntersectionId=currentRoad.from;
+                    v.currentRoadId=targetRoad.id;
+                    v.currentIntersectionId=targetRoad.from;
                     
-                    if(trafficQueues[currentRoad.id].size() && vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg <ftime * currentRoad.maxspeed / currentRoad.lg) 
+                    if(trafficQueues[targetRoad.id].size() && vehicles[trafficQueues[targetRoad.id][trafficQueues[targetRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/targetRoad.lg <ftime * targetRoad.maxspeed / targetRoad.lg) 
                     {
-                     v.positionOnRoad =  vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg;   
+                     v.positionOnRoad =  vehicles[trafficQueues[targetRoad.id][trafficQueues[targetRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/targetRoad.lg;   
                     }
                     else  
-                        v.positionOnRoad=ftime * currentRoad.maxspeed / currentRoad.lg;
+                        v.positionOnRoad=ftime * targetRoad.maxspeed / targetRoad.lg;
                     
-                    trafficQueues[currentRoad.id].push_back(v.id);
+                    trafficQueues[targetRoad.id].push_back(v.id);
                     trafficQueues[i].pop_front();
                     status=3; // reached the next road and exited the current road
                     j--; ok++;
 
                     if(isAdaptive)
                     {
-                       trafficLights[city.getLine(initialRoadId).to].roadChangeMatrix[incomingPhaseId[initialRoadId]][outgoingPhaseId[v.currentRoadId]]++; 
+                       tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[targetRoad.id]]++; 
                      
                        if(v.currentRoadId < i && (step+1) % defaultGreenSteps == 0)
-                            trafficLights[currentRoad.to].roadsTL[incomingPhaseId[currentRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius);    
+                            trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ detectionRadius);    
                     }
                     
                  }
@@ -773,12 +770,12 @@ class Simulation
                     int nextBestRoadId=-1;
                     float nextBestTime=INF;
 
-                    vector<int> adjRoads=city.getAdjRoads(city.getLine(v.currentRoadId).to);
+                    const vector<int>& adjRoads=city.getAdjRoads(city.getLine(v.currentRoadId).to);
                     for(int i=0; i< adjRoads.size(); i++)
                     {
-                     line possibleRoad=city.getLine(adjRoads[i]);
-                     if(currentRoad.id == adjRoads[i]) continue; //current road is, here, the next road in the initial path, it has been initialized before if
-                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(city.getNextRoadBetween(possibleRoad.to,v.destinationIntersectionId)).to == initRoad.to) continue;
+                     const line& possibleRoad=city.getLine(adjRoads[i]);
+                     if(targetRoad.id == adjRoads[i]) continue; //current road is, here, the next road in the initial path, it has been initialized before if
+                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(city.getNextRoadBetween(possibleRoad.to,v.destinationIntersectionId)).to == currentRoad.to) continue;
                      bool isNotForbidden=1;
                      for(int j=0; j<v.forbiddenRoads.size() && isNotForbidden; j++)
                        if(v.forbiddenRoads[j] == possibleRoad.id) isNotForbidden=0;
@@ -799,16 +796,16 @@ class Simulation
                      v.forbiddenRoads.push_back(nextBestRoadId);
                      v.currentRoadId=nextBestRoadId;
                      v.currentIntersectionId=city.getLine(nextBestRoadId).from;   
-                     currentRoad=city.getLine(nextBestRoadId);
-                     if(trafficQueues[currentRoad.id].size() && vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg <ftime * currentRoad.maxspeed / currentRoad.lg) 
+                     const line& chosenRoad=city.getLine(nextBestRoadId);
+                     if(trafficQueues[chosenRoad.id].size() && vehicles[trafficQueues[chosenRoad.id][trafficQueues[chosenRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/chosenRoad.lg <ftime * chosenRoad.maxspeed / chosenRoad.lg) 
                     {
-                     v.positionOnRoad =  vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg;   
+                     v.positionOnRoad =  vehicles[trafficQueues[chosenRoad.id][trafficQueues[chosenRoad.id].size()-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/chosenRoad.lg;   
                     }
                     else  
-                        v.positionOnRoad=ftime * currentRoad.maxspeed / currentRoad.lg;
+                        v.positionOnRoad=ftime * chosenRoad.maxspeed / chosenRoad.lg;
                     
                     v.currentImpatience-=v.patienceRegen*v.currentImpatience;
-                    trafficQueues[currentRoad.id].push_back(v.id);
+                    trafficQueues[chosenRoad.id].push_back(v.id);
                     trafficQueues[i].pop_front();
                     status=3; // reached the next road and exited the current road
                     j--; ok++;   
@@ -816,10 +813,10 @@ class Simulation
 
                     if(isAdaptive)
                     {
-                       trafficLights[city.getLine(initialRoadId).to].roadChangeMatrix[incomingPhaseId[initialRoadId]][outgoingPhaseId[v.currentRoadId]]++; 
+                       tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[v.currentRoadId]]++; 
                      
                        if(v.currentRoadId < i && (step+1) % defaultGreenSteps == 0)
-                            trafficLights[currentRoad.to].roadsTL[incomingPhaseId[currentRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius);    
+                            trafficLights[chosenRoad.to].roadsTL[incomingPhaseId[chosenRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *chosenRoad.lg/ detectionRadius);    
                     }
                     }
                    }
@@ -839,18 +836,18 @@ class Simulation
          
          if(didNotExit){
             float fMovingInitial=fMovingNo;
-            line finalRoad=city.getLine(v.currentRoadId);
-           if(initRoad.id != finalRoad.id)
+            const line& finalRoad=city.getLine(v.currentRoadId);
+           if(currentRoad.id != finalRoad.id)
            {
             MovingVehiclesNo++;
-            float ftime= (1-initPos) * initRoad.lg/initRoad.maxspeed + v.positionOnRoad * finalRoad.lg/finalRoad.maxspeed;
+            float ftime= (1-initPos) * currentRoad.lg/currentRoad.maxspeed + v.positionOnRoad * finalRoad.lg/finalRoad.maxspeed;
             fMovingNo+=ftime/tstep;
             fStationaryNo+=1-ftime/tstep;
             
            }
            else
            {
-            float ftime=(v.positionOnRoad-initPos) * initRoad.lg/initRoad.maxspeed;
+            float ftime=(v.positionOnRoad-initPos) * currentRoad.lg/currentRoad.maxspeed;
             if(ftime>correction) 
             {
              MovingVehiclesNo++; 
@@ -874,7 +871,7 @@ class Simulation
           v.isImpatient = changedPaths || v.currentImpatience > v.impatienceThreshold;
          }
         
-         line currentRoad=city.getLine(i);
+        const line& currentRoad=city.getLine(i);
          if(isAdaptive && (step+1) % defaultGreenSteps == 0)
           {  
             int ind;  
@@ -883,7 +880,7 @@ class Simulation
             for(int j=0; j<trafficQueues[i].size(); j++)
             {
              
-             vehicle v=vehicles[trafficQueues[i][j]];   
+             vehicle& v=vehicles[trafficQueues[i][j]];   
              trafficLights[currentRoad.to].roadsTL[ind].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius);  
             }
           } 
@@ -902,9 +899,9 @@ class Simulation
          ok=0;
          vehicle &v=vehicles[waitQueues[i].front()];  
          v.currentRoadId = city.getNextRoadBetween(v.currentIntersectionId,v.destinationIntersectionId); 
-         line currentRoad = city.getLine(v.currentRoadId);
+         const line& currentRoad = city.getLine(v.currentRoadId);
          node currentIntersection = city.getIntersection(v.currentIntersectionId);
-         trafficLight tl=trafficLights[currentIntersection.id];  
+         trafficLight& tl=trafficLights[currentIntersection.id];  
 
         //if the vehicle has not yet left the waiting queue
         NoInitVehicles--;
@@ -937,7 +934,7 @@ class Simulation
                  
                  if(isAdaptive)
                     {
-                    trafficLights[v.currentIntersectionId].roadChangeMatrix[0][outgoingPhaseId[currentRoad.id]]++;
+                    tl.roadChangeMatrix[0][outgoingPhaseId[currentRoad.id]]++;
 
                     if((step+1) % defaultGreenSteps == 0)
                         trafficLights[currentRoad.to].roadsTL[incomingPhaseId[currentRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius);
@@ -957,10 +954,10 @@ class Simulation
                     int nextBestRoadId=-1;
                     float nextBestTime=INF;
 
-                    vector<int> adjRoads=city.getAdjRoads(i);
+                    const vector<int>& adjRoads=city.getAdjRoads(i);
                     for(int i=0; i< adjRoads.size(); i++)
                     {
-                     line possibleRoad=city.getLine(adjRoads[i]);
+                     const line& possibleRoad=city.getLine(adjRoads[i]);
                      if(v.currentRoadId == adjRoads[i]) continue;
                      if(possibleRoad.to != v.destinationIntersectionId && city.getLine(city.getNextRoadBetween(possibleRoad.to,v.destinationIntersectionId)).to == v.currentIntersectionId) continue;
                      bool isNotForbidden=1;
@@ -987,15 +984,15 @@ class Simulation
                  v.currentRoadId=nextBestRoadId;
                  v.forbiddenRoads.push_back(nextBestRoadId);
                  v.currentImpatience -= v.patienceRegen * v.currentImpatience;
-                 currentRoad=city.getLine(nextBestRoadId);
+                 const line& targetRoad=city.getLine(nextBestRoadId); //redeclarare current Road
                 v.actualSpawnTime=nextAllowedEntry[v.currentIntersectionId];
                 float ftime=ctime-nextAllowedEntry[v.currentIntersectionId];
 
-                 trafficQueues[currentRoad.id].push_back(v.id);
-                 if(trafficQueues[currentRoad.id].size() == 1) {v.positionOnRoad=ftime * currentRoad.maxspeed / currentRoad.lg; }
-                 else v.positionOnRoad = min(vehicles[trafficQueues[currentRoad.id][trafficQueues[currentRoad.id].size()-2]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg, ftime * currentRoad.maxspeed / currentRoad.lg);
+                 trafficQueues[targetRoad.id].push_back(v.id);
+                 if(trafficQueues[targetRoad.id].size() == 1) {v.positionOnRoad=ftime * targetRoad.maxspeed / targetRoad.lg; }
+                 else v.positionOnRoad = min(vehicles[trafficQueues[targetRoad.id][trafficQueues[targetRoad.id].size()-2]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/targetRoad.lg, ftime * targetRoad.maxspeed / targetRoad.lg);
 
-                 float moveTime=v.positionOnRoad*currentRoad.lg/currentRoad.maxspeed;
+                 float moveTime=v.positionOnRoad*targetRoad.lg/targetRoad.maxspeed;
                  MovingVehiclesNo++;
                  fMovingNo+=(nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep;
                  fStationaryNo+= 1- (nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep;
@@ -1006,10 +1003,10 @@ class Simulation
                  changedPaths=1;
                  if(isAdaptive)
                     {
-                    trafficLights[v.currentIntersectionId].roadChangeMatrix[0][outgoingPhaseId[currentRoad.id]]++;
+                    tl.roadChangeMatrix[0][outgoingPhaseId[targetRoad.id]]++;
 
                     if((step+1) % defaultGreenSteps == 0)
-                        trafficLights[currentRoad.to].roadsTL[incomingPhaseId[currentRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius);
+                        trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ detectionRadius);
                     }
                     }
                    }
@@ -1085,7 +1082,7 @@ class Simulation
     if(vehicles[i].isActive)
         {
             vehicle v=vehicles[i];
-            line r=city.getLine(v.currentRoadId);
+            const line& r=city.getLine(v.currentRoadId);
   
             g << v.id << " " << v.currentIntersectionId << " " << r.to << " " << v.currentRoadId << " " << v.positionOnRoad << " " << v.isImpatient<<'\n';
         }
