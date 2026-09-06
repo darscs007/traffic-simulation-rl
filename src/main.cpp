@@ -23,7 +23,7 @@
 #define detectionRadius 28
 #define isAdaptive 1
 #define seed 100
-#define IMPATIENCE_PROPAGATION 0.4f
+#define IMPATIENCE_PROPAGATION 0.4f // may be a feature in the future
 #define MEAN_IMPATIENCE_THRESHOLD 50
 #define MEAN_PATIENCE_REGENERATION 0.5f
 #define PATIENCE_STDDEV 12
@@ -66,8 +66,6 @@ struct line // road
 {
  int from, to;
  int lg ,maxspeed, id;
- queue<int> vehiclesOnRoad; // Queue to store vehicle IDs on the road
- int maxVehicles; // Maximum number of vehicles allowed on the road
 };
 
 struct vehicle
@@ -78,8 +76,7 @@ struct vehicle
     int destinationIntersectionId;
     int currentRoadId;
     float positionOnRoad; // Position on the road as a float between 0.0 and 1.0
-    float spawnTime; // Time the vehicle was spawned
-    int lcar; //length of the car
+    float spawnTime; // Time the vehicle spawns -> to be changed !!!
     bool isActive;
     int lastStepProcessed;
     float initTime, actualSpawnTime, endTime,expectedExternalTime;
@@ -466,7 +463,7 @@ class Simulation
 
     for(int i=0; i<maxcars; i++)
     {
-      vehicle v;
+      vehicle v{};
       v.lastStepProcessed=-1;
       v.destinationIntersectionId=chooseDestination(rng);
       v.currentIntersectionId=chooseOrigin(rng);
@@ -476,10 +473,8 @@ class Simulation
 
       node currentIntersection=city.getIntersection(v.currentIntersectionId);
 
-      v.positionOnRoad=0;
       v.id=i;
       v.spawnTime=v.expectedExternalTime=(waitQueues[v.currentIntersectionId].size()-1) * (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;
-      v.isActive=0;
       v.initTime=0.0f;
       
       v.impatienceThreshold=impatienceTresh(patienceRng);
@@ -1069,7 +1064,7 @@ class Simulation
     if(noTrips) g << sumExtDiv/noTrips << " " << sumIntDiv/noTrips << " " << sumTotDiv/noTrips << " " << taExtTime/teExtTime << " " << taIntTime/teIntTime << " " << (taExtTime+taIntTime)/(teExtTime+teIntTime) << '\n'; 
     else g << 0 << '\n';
 
-    if(step!=1)g << MovingVehiclesNo << " " << StationaryVehiclesNo << " " << fMovingNo << " " << fStationaryNo << '\n';
+    if(step)g << MovingVehiclesNo << " " << StationaryVehiclesNo << " " << fMovingNo << " " << fStationaryNo << '\n';
     else g << 0 <<" " <<0<<  " " << 0 << " " << 0 << '\n';
 
     for(int i=0; i<trafficLights.size(); i++)

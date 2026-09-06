@@ -12,3 +12,11 @@ add_executable(simulator
 target_compile_definitions(simulator PRIVATE
     PROJECT_PATH="${CMAKE_SOURCE_DIR}"
 )
+
+if(MSVC)
+    target_compile_options(simulator PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(simulator PRIVATE
+        -Wall -Wextra -Wpedantic -Wshadow
+    )
+endif()
