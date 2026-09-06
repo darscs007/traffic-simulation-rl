@@ -23,12 +23,13 @@
 #define detectionRadius 28
 #define isAdaptive 1
 #define seed 100
-#define IMPATIECE_PROPAGATION 0.8f
+#define IMPATIENCE_PROPAGATION 0.4f
 #define MEAN_IMPATIENCE_THRESHOLD 50
 #define MEAN_PATIENCE_REGENERATION 0.5f
 #define PATIENCE_STDDEV 12
 #define IMPATIENCE_MULTIPLIER 1.1f
 #define vehicleDetectionRadius 20
+#define fullStepImpatienceReduction 0.5f
 
 using namespace std;
 
@@ -371,6 +372,7 @@ class Simulation
   vector<int> originWeights,destinationWeights;
   discrete_distribution<int> chooseOrigin,chooseDestination;
   mt19937 rng; // generate random number from seed
+  mt19937 patienceRng; 
   vector<queue<int>> waitQueues;
   vector<deque<int>> trafficQueues;
   vector<float> nextAllowedEntry; // vector to store the next allowed entry time for each intersection
@@ -385,7 +387,7 @@ class Simulation
 
  public:
   Simulation(int seedValue)
-    :rng(seedValue)
+    :rng(seedValue), patienceRng(seedValue)
     {}
 
   void configureTrafficLights()
@@ -480,10 +482,10 @@ class Simulation
       v.isActive=0;
       v.initTime=0.0f;
       
-      v.impatienceThreshold=impatienceTresh(rng);
-      while(v.impatienceThreshold < MEAN_IMPATIENCE_THRESHOLD-30 || v.impatienceThreshold > MEAN_IMPATIENCE_THRESHOLD+30) v.impatienceThreshold=impatienceTresh(rng);
-      v.patienceRegen=patienceRegen(rng);
-      while(v.patienceRegen < 0.0f || v.patienceRegen > 1.0f) v.patienceRegen=patienceRegen(rng);
+      v.impatienceThreshold=impatienceTresh(patienceRng);
+      while(v.impatienceThreshold < MEAN_IMPATIENCE_THRESHOLD-30 || v.impatienceThreshold > MEAN_IMPATIENCE_THRESHOLD+30) v.impatienceThreshold=impatienceTresh(patienceRng);
+      v.patienceRegen=patienceRegen(patienceRng);
+      while(v.patienceRegen < 0.0f || v.patienceRegen > 1.0f) v.patienceRegen=patienceRegen(patienceRng);
       v.currentImpatience=0.0f;
       v.isImpatient=0;
 
@@ -673,22 +675,24 @@ class Simulation
                {
                 v.positionOnRoad += tstep * currentRoad.maxspeed / currentRoad.lg;
                 status=1; 
+                
                 }
             else 
                {
+                float ftime= tstep - (vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
                 
-                float ftime= tstep * currentRoad.maxspeed / currentRoad.lg-vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg-v.positionOnRoad;
-                ftime*= currentRoad.lg/currentRoad.maxspeed;
-                
-                trafficLight tl=trafficLights[currentRoad.to]; // patience
-                if(tl.roadsTL[tl.currentState].roadId == currentRoad.id && (1-v.positionOnRoad)*currentRoad.lg < vehicleDetectionRadius) 
-                {
-                 v.currentImpatience+=ftime/tstep;
-                 v.currentImpatience*=IMPATIENCE_MULTIPLIER;
-
-                }
                 v.positionOnRoad = vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg; 
                 status=2;
+   
+                trafficLight tl=trafficLights[currentRoad.to]; // patience
+                if(tl.roadsTL[tl.currentState].roadId == currentRoad.id && (1-v.positionOnRoad)*currentRoad.lg <= vehicleDetectionRadius) 
+                {
+                 ftime = clamp(ftime, 0.0f, tstep); 
+                 v.currentImpatience+=ftime/tstep;
+                 v.currentImpatience*=IMPATIENCE_MULTIPLIER;
+                    
+                }
+
                }
 
          nextAdvance=v.positionOnRoad-nextAdvance;
@@ -834,6 +838,7 @@ class Simulation
            
          
          if(didNotExit){
+            float fMovingInitial=fMovingNo;
             line finalRoad=city.getLine(v.currentRoadId);
            if(initRoad.id != finalRoad.id)
            {
@@ -841,6 +846,7 @@ class Simulation
             float ftime= (1-initPos) * initRoad.lg/initRoad.maxspeed + v.positionOnRoad * finalRoad.lg/finalRoad.maxspeed;
             fMovingNo+=ftime/tstep;
             fStationaryNo+=1-ftime/tstep;
+            
            }
            else
            {
@@ -853,13 +859,19 @@ class Simulation
              fMovingNo+=ftime/tstep; 
              fStationaryNo+=1-ftime/tstep;
              }
-             else fMovingNo++;
+             else 
+             {
+                fMovingNo++;
+                
+             }
             }
             else {StationaryVehiclesNo++; fStationaryNo++;}
             
            }
+
+           if(fMovingNo-fMovingInitial + correction >= 0.9f)v.currentImpatience =max(0.0f, v.currentImpatience - fullStepImpatienceReduction); // impatience_reduction
            }   
-          if(v.currentImpatience <= v.impatienceThreshold && !changedPaths) v.isImpatient=0;
+          v.isImpatient = changedPaths || v.currentImpatience > v.impatienceThreshold;
          }
         
          line currentRoad=city.getLine(i);
@@ -918,6 +930,7 @@ class Simulation
                  fMovingNo+=(nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep;
                  fStationaryNo+= 1- (nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep;
                  lastMovementTime=1;
+                 if((nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep+correction >=1)v.currentImpatience =max(0.0f, v.currentImpatience - fullStepImpatienceReduction); // impatience_reduction   
 
                  waitQueues[v.currentIntersectionId].pop();  
                  nextAllowedEntry[v.currentIntersectionId]+= (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;  
@@ -949,7 +962,7 @@ class Simulation
                     {
                      line possibleRoad=city.getLine(adjRoads[i]);
                      if(v.currentRoadId == adjRoads[i]) continue;
-                     if(shortPaths[possibleRoad.to][v.destinationIntersectionId] == v.currentRoadId) continue;
+                     if(possibleRoad.to != v.destinationIntersectionId && city.getLine(shortPaths[possibleRoad.to][v.destinationIntersectionId]).to == v.currentIntersectionId) continue;
                      bool isNotForbidden=1;
                      for(int j=0; j<v.forbiddenRoads.size() && isNotForbidden; j++)
                        if(v.forbiddenRoads[j] == possibleRoad.id) isNotForbidden=0;
@@ -1008,7 +1021,13 @@ class Simulation
             if(nextAllowedEntry[v.currentIntersectionId] - iNextEntry < correction) 
               {StationaryVehiclesNo++; fStationaryNo++; lastMovementTime=0;}
               else
-              {MovingVehiclesNo++; fMovingNo+= (nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep; fStationaryNo+= 1-(nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep; lastMovementTime=(nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep;}  
+              {
+                MovingVehiclesNo++; 
+                fMovingNo+= (nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep; 
+                fStationaryNo+= 1-(nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep; 
+                lastMovementTime=(nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep;
+                
+             }  
                 
               nextAllowedEntry[v.currentIntersectionId]=ctime;   
              }
@@ -1017,11 +1036,12 @@ class Simulation
         {
             MovingVehiclesNo++;
             fMovingNo++;
+            v.currentImpatience =max(0.0f, v.currentImpatience - fullStepImpatienceReduction); // impatience_reduction
             lastMovementTime=1;
         }
         
     
-        if(v.currentImpatience <= v.impatienceThreshold && !changedPaths) v.isImpatient=0;
+        v.isImpatient =changedPaths || v.currentImpatience > v.impatienceThreshold;
         } 
         if(!lastMovementTime) {StationaryVehiclesNo+=NoInitVehicles; fStationaryNo+=NoInitVehicles;}
         else{MovingVehiclesNo+=NoInitVehicles; fMovingNo+=NoInitVehicles * lastMovementTime; fStationaryNo+= NoInitVehicles* (1-lastMovementTime);}  
@@ -1128,7 +1148,7 @@ int main() {
     if (!g.is_open()) {
     cerr << "Can't open output.out\n";
     return 1;
-}
+    }
    g << steps << '\n';
    for(int i=0; i<steps; i++)
     {

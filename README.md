@@ -29,6 +29,9 @@ visualizer.
   gap behind the preceding vehicle.
 - Transfer to the next road when there is enough entry space; the unused part
   of the time step is preserved as distance on the next road.
+- Individual driver behaviour through distinct impatience thresholds and
+  recovery rates. Drivers can abandon their planned next road after prolonged
+  blockage and choose an available alternative.
 - Protection against processing a transferred vehicle twice in the same time
   step (`lastStepProcessed`).
 - Vehicle reinitialization after reaching its destination, followed by a new
@@ -64,6 +67,59 @@ Traffic-light durations can be static or adaptive. In both modes the phase
 order is fixed and exactly one incoming road (or the external queue) is green
 at an intersection. Adaptive control changes only phase durations; it does
 not change the vehicle-movement rules.
+
+### Individual drivers: patience, rerouting, and learning
+
+Every vehicle has two persistent behavioural traits and one per-trip state:
+
+- `impatienceThreshold`: the accumulated impatience at which it may reroute;
+- `currentImpatience`: its current frustration level, reset for each trip;
+- `patienceRegen`: the fraction by which its impatience is reduced after a
+  successful reroute.
+
+At initialization, thresholds are sampled from a bounded normal distribution
+centred on `MEAN_IMPATIENCE_THRESHOLD`, while regeneration factors are sampled
+independently around `MEAN_PATIENCE_REGENERATION`. This makes drivers react at
+different times instead of treating every vehicle identically.
+
+Impatience grows only when a vehicle is prevented from using a green movement:
+when it is close to a green internal intersection but constrained by the
+vehicle ahead, when it reaches a green intersection whose chosen outgoing road
+has insufficient entry space, or when the head of an external queue has green
+but cannot enter its first road. The increase is proportional to the blocked
+part of the time step and is amplified by `IMPATIENCE_MULTIPLIER`.
+
+If the threshold is exceeded, the driver may make a non-optimal routing
+decision. It evaluates outgoing roads from the current intersection, rejects
+roads without sufficient entry space, the originally planned next road, and
+choices that immediately lead back toward the intersection just left. Among
+the remaining candidates it chooses the one with the smallest free-flow
+remaining travel time. Therefore a reroute can be slower than the original
+shortest route: it represents a frustrated driver trying to escape a local
+blockage, not a globally omniscient route planner.
+
+Rerouting can decongest the blocked approach by removing a vehicle that would
+otherwise keep waiting for the same movement, which may also let following
+vehicles progress. It is not guaranteed to improve the global result: the
+alternative can be longer or can transfer congestion to another road. Its
+effect is therefore measured through the completed-trip and movement
+statistics rather than assumed by the model.
+
+The vehicle records every road it chose through such a reroute in
+`forbiddenRoads`. It will not select the same road again during that trip.
+This is the model's limited form of driver learning: a driver does not repeat a
+previous rerouting choice after it has already tried it. The rerouting memory,
+impatience, and current flag are reset when the vehicle finishes its trip and
+is reinitialized; its threshold and regeneration trait remain individual to
+that vehicle.
+
+Impatience also recovers. For an internal road movement representing at least
+90% of a simulation step, it decreases by `fullStepImpatienceReduction`; a
+successful reroute applies the driver's multiplicative `patienceRegen`
+reduction. A vehicle row
+in the trace has `isImpatient = 1` when its accumulated impatience is above
+its threshold, or in the exact step where it reroutes. The visualizer can show
+this state with either a red marker or an emoji.
 
 ### Adaptive traffic lights
 
@@ -239,7 +295,7 @@ These constants are currently defined at the top of `src/main.cpp`:
 | Setting | Value |
 | --- | ---: |
 | Number of simulated vehicles | `400` |
-| Number of time steps | `2000` |
+| Number of time steps | `4000` |
 | Time-step duration | `0.1` |
 | Vehicle length | `1` |
 | Safety gap | `1.5` |
@@ -302,7 +358,7 @@ are emitted only after completed trips exist. Initial vehicles with an initial
 external expected time can be zero.
 
 The visualizer displays these six ratios as percentages. Up to 150% is green,
-150–250% is yellow, and over 200% is red. These colours are display thresholds,
+150–250% is yellow, and over 250% is red. These colours are display thresholds,
 not additional simulation rules.
 
 ## Trace format
@@ -328,8 +384,8 @@ For example, the initial frame may look like this:
 0 0 0 0
 -2 -2 -2 -2
 5
-0 2 1 5 0.03
-1 4 5 14 0.05
+0 2 1 5 0.03 0
+1 4 5 14 0.05 0
 ...
 ```
 
@@ -342,17 +398,18 @@ completed_trips  avg_external  avg_internal  avg_total  weighted_external  weigh
 Each vehicle row has:
 
 ```text
-vehicle_id  from_intersection  to_intersection  road_id  normalized_position
+vehicle_id  from_intersection  to_intersection  road_id  normalized_position  is_impatient
 ```
 
 `normalized_position` is in `[0, 1]`: `0` is the entry of the directed road
 and `1` is its exit. The visualizer uses `road_id` and this position to place
 the vehicle on the correct directional lane. The `from` and `to` fields are
-also useful for checking trace consistency.
+also useful for checking trace consistency. `is_impatient` is `1` when the
+driver is currently above its rerouting threshold or rerouted during that
+frame; otherwise it is `0`.
 
 ## Next development steps
 
-- Individualize the drivers: different preferred velocities, may be prone to changing paths when the most efficient one is full
 - Replace the all-pairs route precomputation with priority-queue Dijkstra and make code optimisations (time and memory)
 - Use a synchronized transfer/reservation phase to remove road-order effects.
 - Add automated tests for route validity, queue spacing, and trace format.

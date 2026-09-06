@@ -29,6 +29,7 @@
     .statistics { display: flex; gap: 8px 12px; flex-wrap: wrap; margin: -4px 0 14px; color: #475467; font-size: 13px; font-variant-numeric: tabular-nums; }
     .statistics span { white-space: nowrap; }
     .visual-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 20px; align-items: start; }
+    .side-column { display: grid; gap: 14px; }
     .trip-statistics { min-height: 160px; padding: 12px; border: 1px solid #d0d8e1; background: #f8fafc; color: #475467; font-size: 13px; font-variant-numeric: tabular-nums; }
     .trip-statistics h2 { margin: 0 0 10px; color: #1f2933; font-size: 14px; font-weight: 600; }
     .trip-metric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 0 5px 7px; border-left: 3px solid #c8d0d8; }
@@ -41,6 +42,15 @@
     .no-data { color: #667085; font-style: italic; }
     .vehicle { fill: #243eaf; stroke: #73b9e2; stroke-width: .05; }
     .impatient-indicator { fill: #ef2020; stroke: #fff; stroke-width: .1; }
+    .impatience-marker { pointer-events: none; }
+    .impatience-bubble { fill: #fff7ed; stroke: #ef4444; stroke-width: .12; filter: drop-shadow(0 0 .22px #ef4444); }
+    .impatience-emoji { font-size: 1.25px; text-anchor: middle; dominant-baseline: middle; }
+    .impatience-tail { opacity: .62; }
+    .birthday-greeting { padding: 9px 4px 4px; text-align: center; color: #315f9c; }
+    .birthday-decoration { display: flex; align-items: center; gap: 7px; color: #8aa9cb; font-size: 12px; }
+    .birthday-decoration::before, .birthday-decoration::after { content: ''; flex: 1; height: 1px; background: #c9d9ea; }
+    .birthday-title { margin: 3px 0 1px; color: #315f9c; font-family: "Segoe Script", "Brush Script MT", cursive; font-size: 29px; line-height: 1.05; }
+    .birthday-note { margin: 0; color: #6b8cb1; font-family: "Palatino Linotype", Georgia, serif; font-size: 11px; font-style: italic; letter-spacing: .3px; }
     .vehicle-label { fill: #fff; font-size: 1px; text-anchor: middle; dominant-baseline: middle; font-weight: 700; }
     .error { color: #b42318; }
     .road-label {fill: #fff;font-size: 1.2px;text-anchor: middle;dominant-baseline: middle;font-weight: 600;}
@@ -66,7 +76,13 @@
         <div id="statistics" class="statistics" aria-live="polite"></div>
         <svg id="map" viewBox="-8 -8 80 100" role="img" aria-label="The road network"></svg>
       </div>
-      <aside id="trip-statistics" class="trip-statistics" aria-live="polite"></aside>
+      <div class="side-column">
+        <aside id="trip-statistics" class="trip-statistics" aria-live="polite"></aside>
+        <section id="birthday-greeting" class="birthday-greeting" hidden aria-label="Birthday greeting">
+          <div class="birthday-decoration">✦</div>
+          <div class="birthday-title">Happy Birthday<span id="birthday-name"></span>!</div>
+        </section>
+      </div>
     </div>
   </main>
   <script>
@@ -76,6 +92,8 @@
     const frameLabel = document.getElementById('frame');
     const statistics = document.getElementById('statistics');
     const tripStatisticsPanel = document.getElementById('trip-statistics');
+    const birthdayGreeting = document.getElementById('birthday-greeting');
+    const birthdayName = document.getElementById('birthday-name');
     const previous = document.getElementById('previous');
     const next = document.getElementById('next');
     const run = document.getElementById('run');
@@ -95,6 +113,12 @@
     const useRawVehiclePositions = false;
     const vehicleStartInset = 0.5;
     const vehicleEndpointInset = 2.9;
+    const impatienceLingerSteps = 10;
+    const useEmojiForImpatience = true; // false = red dot, true = emoji with visual tail
+    const birthdayPerson = 'ANABEL'; 
+    const today = new Date();
+    birthdayGreeting.hidden = !(today.getMonth() === 8 && today.getDate() === 5);
+    birthdayName.textContent = birthdayPerson ? `, ${birthdayPerson}` : '';
 
     const make = (tag, attrs = {}) => {
       const el = document.createElementNS(ns, tag);
@@ -167,6 +191,22 @@
       return { frames: result, notice: '' };
     }
 
+    function addImpatienceVisualTail(traceFrames) {
+      const lingerUntilByVehicle = new Map();
+
+      traceFrames.forEach((frame, step) => {
+        const activeIds = new Set(frame.vehicles.map(vehicle => vehicle.id));
+        for (const id of lingerUntilByVehicle.keys()) {
+          if (!activeIds.has(id)) lingerUntilByVehicle.delete(id);
+        }
+
+        frame.vehicles.forEach(vehicle => {
+          if (vehicle.isImpatient) lingerUntilByVehicle.set(vehicle.id, step + impatienceLingerSteps);
+          vehicle.showImpatience = (lingerUntilByVehicle.get(vehicle.id) ?? -1) >= step;
+        });
+      });
+    }
+
     function renderFrame() {
       if (!vehiclesLayer || !frames.length) return;
       vehiclesLayer.replaceChildren();
@@ -184,10 +224,23 @@
         const x = lane.from.x * (1 - position) + lane.to.x * position;
         const y = lane.from.y * (1 - position) + lane.to.y * position;
         vehiclesLayer.append(make('circle', { class: 'vehicle', cx: x, cy: y, r: 1}));
-        if (vehicle.isImpatient) {
+        if (!useEmojiForImpatience && vehicle.isImpatient) {
           vehiclesLayer.append(make('circle', {
             class: 'impatient-indicator', cx: x + .62, cy: y - .62, r: .23
           }));
+        } else if (useEmojiForImpatience && vehicle.showImpatience) {
+          const marker = make('g', {
+            class: vehicle.isImpatient ? 'impatience-marker' : 'impatience-marker impatience-tail'
+          });
+          marker.append(make('animateTransform', {
+            attributeName: 'transform', type: 'translate', values: '0 0; 0 -0.28; 0 0',
+            dur: '.55s', repeatCount: 'indefinite'
+          }));
+          marker.append(make('circle', { class: 'impatience-bubble', cx: x + 1.02, cy: y - 1.02, r: .68 }));
+          const emoji = make('text', { class: 'impatience-emoji', x: x + 1.02, y: y - .98 });
+          emoji.textContent = '😠';
+          marker.append(emoji);
+          vehiclesLayer.append(marker);
         }
         const label = make('text', { class: 'vehicle-label', x, y: y + .1 });
         label.textContent = vehicle.id;
@@ -439,6 +492,7 @@ svg.append(label);
         const text = await fetch(`output/output.out?${Date.now()}`).then(response => response.text());
         const trace = parseTrace(text);
         frames = trace.frames;
+        addImpatienceVisualTail(frames);
         traceNotice = trace.notice;
         slider.max = frames.length - 1;
         setFrame(0);
