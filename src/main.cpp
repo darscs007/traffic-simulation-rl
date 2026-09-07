@@ -414,9 +414,18 @@ class Simulation
     }
   };
 
-
-  float taExtTime=0.0f, teExtTime=0.0f, taIntTime=0.0f, teIntTime=0.0f, sumExtDiv=0.0f, sumIntDiv=0.0f, sumTotDiv=0.0f;
+  struct TripStatistics
+  {
+  float taExtTime=0.0f;
+  float teExtTime=0.0f;
+  float taIntTime=0.0f;
+  float teIntTime=0.0f; 
+  float sumExtDiv=0.0f; 
+  float sumIntDiv=0.0f; 
+  float sumTotDiv=0.0f;
   int noTrips=0;
+  };
+  TripStatistics tripStats;
   
   void transferToRoad(vehicle &v, float ftime, int targetRoadId, bool trafficQueue, int sourceId) // returns the position on the next road;
   {
@@ -586,17 +595,14 @@ class Simulation
     
     if(v.initTime+v.expectedExternalTime != 0.0f)
      {
-      noTrips++;
-    
-      teIntTime+=city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId);
-      taIntTime+=v.endTime-v.actualSpawnTime;
-      sumIntDiv+= (v.endTime-v.actualSpawnTime)/city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId);
-      
-      sumTotDiv+= (v.endTime-v.initTime)/(v.expectedExternalTime+city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId));
-
-      sumExtDiv+= (v.actualSpawnTime-v.initTime)/v.expectedExternalTime;
-      teExtTime+=v.expectedExternalTime; //total expected=  te, total actual = ta
-      taExtTime+=v.actualSpawnTime-v.initTime;
+      tripStats.noTrips++;
+      tripStats.teIntTime+=city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId);
+      tripStats.taIntTime+=v.endTime-v.actualSpawnTime;
+      tripStats.sumIntDiv+= (v.endTime-v.actualSpawnTime)/city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId);
+      tripStats.sumTotDiv+= (v.endTime-v.initTime)/(v.expectedExternalTime+city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId));
+      tripStats.sumExtDiv+= (v.actualSpawnTime-v.initTime)/v.expectedExternalTime;
+      tripStats.teExtTime+=v.expectedExternalTime; //total expected=  te, total actual = ta
+      tripStats.taExtTime+=v.actualSpawnTime-v.initTime;
       }
       
       v.destinationIntersectionId=chooseDestination(rng);
@@ -1035,8 +1041,8 @@ class Simulation
    cout << step << '\n';    
     int nr=0;
     
-    g << noTrips << " ";
-    if(noTrips) g << sumExtDiv/noTrips << " " << sumIntDiv/noTrips << " " << sumTotDiv/noTrips << " " << taExtTime/teExtTime << " " << taIntTime/teIntTime << " " << (taExtTime+taIntTime)/(teExtTime+teIntTime) << '\n'; 
+    g << tripStats.noTrips << " ";
+    if(tripStats.noTrips) g << tripStats.sumExtDiv/tripStats.noTrips << " " << tripStats.sumIntDiv/tripStats.noTrips << " " << tripStats.sumTotDiv/tripStats.noTrips << " " << tripStats.taExtTime/tripStats.teExtTime << " " << tripStats.taIntTime/tripStats.teIntTime << " " << (tripStats.taExtTime+tripStats.taIntTime)/(tripStats.teExtTime+tripStats.teIntTime) << '\n'; 
     else g << 0 << '\n';
 
     if(step)g << mstats.moving << " " << mstats.stationary << " " << mstats.fractionalMoving << " " << mstats.fractionalStationary << '\n';
