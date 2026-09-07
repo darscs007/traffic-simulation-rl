@@ -97,6 +97,7 @@ enum class LeaderState
   ExitedRoad
 };
 
+
 class Graph
 {
 private:
@@ -372,6 +373,225 @@ public:
    }
 };
 
+class trafficLightSystem
+{
+  private:
+   vector<trafficLight> trafficLights;
+   vector<int> incomingPhaseId;
+   vector<int> outgoingPhaseId;
+
+  public:
+  
+  void configureTrafficLights(const Graph& city)
+  {
+    trafficLights.clear();
+    incomingPhaseId.clear();
+    outgoingPhaseId.clear();
+    trafficLights.resize(city.getNoIntersections());
+    
+    if(isAdaptive)
+    {
+    incomingPhaseId.assign(city.getNoRoads(), -1);
+    outgoingPhaseId.assign(city.getNoRoads(), -1);
+    }
+    
+    for (int i = 0; i < city.getNoIntersections(); i++)
+    {
+        trafficLights[i].id = i;
+        trafficLights[i].roadsTL.push_back({externalRoadId,defaultGreenSteps,0}); // adding the external road
+        trafficLights[i].currentState = 0;
+        trafficLights[i].nextChangeStep = trafficLights[i].roadsTL[0].greenSteps;
+    }
+    
+    for(int i=0; i<city.getNoIntersections(); i++)
+    {
+        const vector<int>& adjRoads=city.getAdjRoads(i);
+        int ind=1;
+        for(int j=0; j<adjRoads.size(); j++)
+        {
+            const line& currentRoad=city.getLine(adjRoads[j]);
+            trafficLights[currentRoad.to].roadsTL.push_back({currentRoad.id,defaultGreenSteps});
+            if(isAdaptive)
+            {
+            incomingPhaseId[currentRoad.id]=trafficLights[currentRoad.to].roadsTL.size()-1;
+            outgoingPhaseId[currentRoad.id]=ind++; //column number, 0 is the external road, so we start from 1
+            }
+        }
+    }
+
+    if(isAdaptive)
+        for(int i=0; i<trafficLights.size(); i++)
+            trafficLights[i].roadChangeMatrix.resize(trafficLights[i].roadsTL.size(), vector<int>(city.getAdjRoads(i).size()+1,0));
+  }
+
+  void updateTrafficLights(int step, const Graph& city)
+  {
+
+    for(int i=0; i<trafficLights.size(); i++)
+    {
+        if( isAdaptive && step &&step % (trafficLights[i].roadsTL.size()*defaultGreenSteps) == 0)
+        {
+         float maxscore=0.0f, distance=0.0f;
+         while(distance <= detectionRadius) 
+         {
+           maxscore+=1-distance/detectionRadius;
+           distance+=CAR_LENGTH+SAFETY_GAP; 
+         }
+
+         float tscore=0.0f;
+
+         for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
+         {
+           int sumP=0; //calculate the number of vehicles that went through the intersection
+           for(int e=0; e< trafficLights[i].roadChangeMatrix[j].size(); e++)
+               sumP+=trafficLights[i].roadChangeMatrix[j][e];
+            
+           if(!sumP) trafficLights[i].roadsTL[j].availability=1;
+           else
+           {
+            trafficLights[i].roadsTL[j].availability= (float)trafficLights[i].roadChangeMatrix[j][0]/sumP;
+            for(int e=1; e < trafficLights[i].roadChangeMatrix[j].size(); e++)
+            {
+            int outgoingRoadId= city.getAdjRoads(i)[e-1];
+            trafficLights[i].roadsTL[j].availability+= (float) trafficLights[i].roadChangeMatrix[j][e] /sumP * (0.25f + 0.75f * (1.0f - clamp(trafficLights[city.getLine(outgoingRoadId).to].roadsTL[incomingPhaseId[outgoingRoadId]].score/maxscore,0.0f,1.0f))); 
+            }
+           }
+         
+         tscore+=trafficLights[i].roadsTL[j].score*trafficLights[i].roadsTL[j].availability;
+         }
+
+         if(tscore-correction>=0)
+         { 
+         int totalSteps=0;
+         int usedSteps=0;
+
+         for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
+            {
+             
+             trafficLights[i].roadsTL[j].greenSteps=  minGreenSteps;
+             usedSteps+=trafficLights[i].roadsTL[j].greenSteps;
+             totalSteps+=trafficLights[i].roadsTL[j].greenSteps;
+            }
+         
+         for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
+            {
+             int extraSteps= trafficLights[i].roadsTL[j].score*trafficLights[i].roadsTL[j].availability/ tscore * (trafficLights[i].roadsTL.size() * defaultGreenSteps - usedSteps);
+             trafficLights[i].roadsTL[j].greenSteps+= extraSteps ;
+             totalSteps+=extraSteps;
+            }
+        
+         totalSteps=trafficLights[i].roadsTL.size()*defaultGreenSteps - totalSteps;
+         int ind=0;
+         
+        while(totalSteps)
+        {
+         trafficLights[i].roadsTL[ind].greenSteps++;
+         totalSteps--;
+         ind++;
+         ind%=trafficLights[i].roadsTL.size();
+        }
+         }
+         else
+         {
+            for(int j=0;j<trafficLights[i].roadsTL.size(); j++)
+             trafficLights[i].roadsTL[j].greenSteps=defaultGreenSteps;
+             
+         }
+
+
+        }
+        
+        if(step >= trafficLights[i].nextChangeStep)
+        {
+           trafficLights[i].currentState = (trafficLights[i].currentState+1) % trafficLights[i].roadsTL.size();
+           trafficLights[i].nextChangeStep += trafficLights[i].roadsTL[trafficLights[i].currentState].greenSteps;
+        }
+    }
+
+    if(isAdaptive && step % defaultGreenSteps==0) 
+      for(int i=0; i<trafficLights.size(); i++)
+        for (int e = 0; e < trafficLights[i].roadsTL.size(); e++)
+            trafficLights[i].roadsTL[e].score= 0.0f;
+  }
+
+  bool isGreenFor(int intersectionId, int thisRoadId)
+  {
+    const trafficLight& tl= trafficLights[intersectionId];
+    if(tl.roadsTL[tl.currentState].roadId == thisRoadId) return 1;
+    return 0;
+
+  }
+
+  void recordRoadChange(const vehicle& v, const line& currentRoad, const line& targetRoad, int step)
+  {
+    if(isAdaptive)
+    {
+    trafficLight& tl=trafficLights[currentRoad.to];  
+    tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[targetRoad.id]]++; 
+                     
+    if(targetRoad.id < currentRoad.id && (step+1) % defaultGreenSteps == 0)
+    trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ detectionRadius);    
+    } 
+  }
+
+  void recordDestination(int intersectionId, int roadId)
+  {
+    if(isAdaptive)
+    {
+    trafficLight& tl=trafficLights[intersectionId];
+    tl.roadChangeMatrix[incomingPhaseId[roadId]][0]++;
+    }
+  }
+
+  void recordExtRoadChange(const vehicle&v, const line& targetRoad, int step)
+  {
+    if(isAdaptive)
+    {
+      trafficLight& tl=trafficLights[targetRoad.from];  
+      tl.roadChangeMatrix[0][outgoingPhaseId[targetRoad.id]]++;
+
+      if((step+1) % defaultGreenSteps == 0)
+      trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ detectionRadius);
+    }    
+  }
+
+  void internalRoadScoring(const line& currentRoad, const vector<deque<int>>& trafficQueues,const vector<vehicle>& vehicles,int step)
+  {
+  if(isAdaptive && (step+1) % defaultGreenSteps == 0)
+  {  
+    int ind;  
+    for(int e=0; e<trafficLights[currentRoad.to].roadsTL.size(); e++)
+      if(trafficLights[currentRoad.to].roadsTL[e].roadId==currentRoad.id) {ind=e;break;}
+        
+    for(int j=0; j< trafficQueues[currentRoad.id].size(); j++)
+            {
+             
+             const vehicle& v=vehicles[trafficQueues[currentRoad.id][j]];   
+             if(1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius + correction < 0) break;
+             else trafficLights[currentRoad.to].roadsTL[ind].score += 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius;
+             
+            }
+          } 
+  } 
+
+  void externalRoadScoring(const node& currentIntersection, int queSize,float timeFromIntersection ,int step)
+  {
+  if(isAdaptive && (step+1) % defaultGreenSteps == 0) 
+  {
+  float firstOffset = max(0.0f,timeFromIntersection)*currentIntersection.externalSpeed; 
+  for(int e=0; e < queSize; e++)
+  if( 1.0f - firstOffset/ detectionRadius >0 )  {trafficLights[currentIntersection.id].roadsTL[0].score +=  1.0f - firstOffset/ detectionRadius; firstOffset+=CAR_LENGTH+SAFETY_GAP;}
+  else break;
+  }
+
+  }
+
+  int getCurrentGreenRoad(int currentIntersectionId) const
+  {
+    return trafficLights[currentIntersectionId].roadsTL[trafficLights[currentIntersectionId].currentState].roadId;
+  }
+};
+
 class Simulation
 {
  private:
@@ -386,12 +606,9 @@ class Simulation
   vector<deque<int>> waitQueues;
   vector<deque<int>> trafficQueues;
   vector<float> nextAllowedEntry; // vector to store the next allowed entry time for each intersection
-  vector<trafficLight> trafficLights; // vector to store traffic light configurations for each intersection
-  vector<int> incomingPhaseId;
-  vector<int> outgoingPhaseId;
   normal_distribution<float> impatienceTresh;
   normal_distribution<float> patienceRegen;
-  
+  trafficLightSystem tlmanager;
   struct stepMovementStats
   {
     int moving=0;
@@ -427,7 +644,7 @@ class Simulation
   };
   TripStatistics tripStats;
   
-  void transferToRoad(vehicle &v, float ftime, int targetRoadId, bool trafficQueue, int sourceId) // returns the position on the next road;
+  void transferToRoad(vehicle &v, float ftime, int targetRoadId, bool trafficQueue, int sourceId) 
   {
     const line& targetRoad=city.getLine(targetRoadId);
 
@@ -490,43 +707,8 @@ class Simulation
 
   void configureTrafficLights()
   {
-    trafficLights.resize(city.getNoIntersections());
-    
-    if(isAdaptive)
-    {
-    incomingPhaseId.assign(city.getNoRoads(), -1);
-    outgoingPhaseId.assign(city.getNoRoads(), -1);
-    }
-    
-    for (int i = 0; i < city.getNoIntersections(); i++)
-    {
-        trafficLights[i].id = i;
-        trafficLights[i].roadsTL.push_back({externalRoadId,defaultGreenSteps,0}); // adding the external road
-        trafficLights[i].currentState = 0;
-        trafficLights[i].nextChangeStep = trafficLights[i].roadsTL[0].greenSteps;
-    }
-    
-    for(int i=0; i<city.getNoIntersections(); i++)
-    {
-        const vector<int>& adjRoads=city.getAdjRoads(i);
-        int ind=1;
-        for(int j=0; j<adjRoads.size(); j++)
-        {
-            const line& currentRoad=city.getLine(adjRoads[j]);
-            trafficLights[currentRoad.to].roadsTL.push_back({currentRoad.id,defaultGreenSteps});
-            if(isAdaptive)
-            {
-            incomingPhaseId[currentRoad.id]=trafficLights[currentRoad.to].roadsTL.size()-1;
-            outgoingPhaseId[currentRoad.id]=ind++; //column number, 0 is the external road, so we start from 1
-            }
-        }
-    }
-
-    if(isAdaptive)
-        for(int i=0; i<trafficLights.size(); i++)
-            trafficLights[i].roadChangeMatrix.resize(trafficLights[i].roadsTL.size(), vector<int>(city.getAdjRoads(i).size()+1,0));
-       
-    cout << "Traffic lights configured successfully\n";
+   tlmanager.configureTrafficLights(city);
+   cout << "Traffic lights configured successfully\n";
   }
 
   void readCity()
@@ -624,106 +806,12 @@ class Simulation
       waitQueues[v.currentIntersectionId].push_back(v.id);
   }
 
-  void updateTrafficLights(int step)
-  {
-
-    for(int i=0; i<trafficLights.size(); i++)
-    {
-        if( isAdaptive && step &&step % (trafficLights[i].roadsTL.size()*defaultGreenSteps) == 0)
-        {
-         float maxscore=0.0f, distance=0.0f;
-         while(distance <= detectionRadius) 
-         {
-           maxscore+=1-distance/detectionRadius;
-           distance+=CAR_LENGTH+SAFETY_GAP; 
-         }
-
-         float tscore=0.0f;
-
-         for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
-         {
-           int sumP=0; //calculate the number of vehicles that went through the intersection
-           for(int e=0; e< trafficLights[i].roadChangeMatrix[j].size(); e++)
-               sumP+=trafficLights[i].roadChangeMatrix[j][e];
-            
-           if(!sumP) trafficLights[i].roadsTL[j].availability=1;
-           else
-           {
-            trafficLights[i].roadsTL[j].availability= (float)trafficLights[i].roadChangeMatrix[j][0]/sumP;
-            for(int e=1; e < trafficLights[i].roadChangeMatrix[j].size(); e++)
-            {
-            int outgoingRoadId= city.getAdjRoads(i)[e-1];
-            trafficLights[i].roadsTL[j].availability+= (float) trafficLights[i].roadChangeMatrix[j][e] /sumP * (0.25f + 0.75f * (1.0f - clamp(trafficLights[city.getLine(outgoingRoadId).to].roadsTL[incomingPhaseId[outgoingRoadId]].score/maxscore,0.0f,1.0f))); 
-            }
-           }
-         
-         tscore+=trafficLights[i].roadsTL[j].score*trafficLights[i].roadsTL[j].availability;
-         }
-
-         if(tscore-correction>=0)
-         { 
-         int totalSteps=0;
-         int usedSteps=0;
-
-         for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
-            {
-             
-             trafficLights[i].roadsTL[j].greenSteps=  minGreenSteps;
-             usedSteps+=trafficLights[i].roadsTL[j].greenSteps;
-             totalSteps+=trafficLights[i].roadsTL[j].greenSteps;
-            }
-         
-         for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
-            {
-             int extraSteps= trafficLights[i].roadsTL[j].score*trafficLights[i].roadsTL[j].availability/ tscore * (trafficLights[i].roadsTL.size() * defaultGreenSteps - usedSteps);
-             trafficLights[i].roadsTL[j].greenSteps+= extraSteps ;
-             totalSteps+=extraSteps;
-            }
-        
-         totalSteps=trafficLights[i].roadsTL.size()*defaultGreenSteps - totalSteps;
-         int ind=0;
-         
-        while(totalSteps)
-        {
-         trafficLights[i].roadsTL[ind].greenSteps++;
-         totalSteps--;
-         ind++;
-         ind%=trafficLights[i].roadsTL.size();
-        }
-         }
-         else
-         {
-            for(int j=0;j<trafficLights[i].roadsTL.size(); j++)
-             trafficLights[i].roadsTL[j].greenSteps=defaultGreenSteps;
-             
-         }
-
-
-        }
-        
-        if(step >= trafficLights[i].nextChangeStep)
-        {
-           trafficLights[i].currentState = (trafficLights[i].currentState+1) % trafficLights[i].roadsTL.size();
-           trafficLights[i].nextChangeStep += trafficLights[i].roadsTL[trafficLights[i].currentState].greenSteps;
-        }
-           
-        
-
-    }
-    
-
-    if(isAdaptive && step % defaultGreenSteps==0) 
-      for(int i=0; i<trafficLights.size(); i++)
-        for (int e = 0; e < trafficLights[i].roadsTL.size(); e++)
-            trafficLights[i].roadsTL[e].score= 0.0f;
-  }
-
   void oneStep(int step) 
   {
     stepMovementStats mstats;
     vector<int> pendingReinitializations;
 
-    updateTrafficLights(step);
+    tlmanager.updateTrafficLights(step,city);
 
     for(int i=0; i<city.getNoRoads(); i++)
       {
@@ -762,8 +850,7 @@ class Simulation
                 v.positionOnRoad = vehicles[trafficQueues[i][j-1]].positionOnRoad-(CAR_LENGTH+SAFETY_GAP)/currentRoad.lg; 
                 leaderState= LeaderState::Blocked;
    
-                const trafficLight& tl=trafficLights[currentRoad.to]; // patience
-                if(tl.roadsTL[tl.currentState].roadId == currentRoad.id && (1-v.positionOnRoad)*currentRoad.lg <= vehicleDetectionRadius) 
+                if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id) && (1-v.positionOnRoad)*currentRoad.lg <= vehicleDetectionRadius) 
                   updateImpatience(v,ftime/tstep);
                }
 
@@ -771,11 +858,9 @@ class Simulation
             
          if(v.positionOnRoad >=1)
             {
-             trafficLight& tl=trafficLights[currentRoad.to];
-             
              if(currentRoad.to == v.destinationIntersectionId) 
               {
-                   if(tl.roadsTL[tl.currentState].roadId == currentRoad.id) 
+                   if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id)) 
                     { 
                     
                     float ftime=(1-initPos) * currentRoad.lg/currentRoad.maxspeed;
@@ -789,7 +874,7 @@ class Simulation
                     trafficQueues[i].pop_front();
                     j--;
 
-                    if(isAdaptive)tl.roadChangeMatrix[incomingPhaseId[v.currentRoadId]][0]++;
+                    tlmanager.recordDestination(v.destinationIntersectionId,v.currentRoadId);
                     }
                    else 
                    {
@@ -801,7 +886,7 @@ class Simulation
                {
                 float ftime= (v.positionOnRoad - 1) * currentRoad.lg / currentRoad.maxspeed;
                 leaderState=LeaderState::Blocked; // attemts reaching the next road
-                if(tl.roadsTL[tl.currentState].roadId == currentRoad.id)
+                if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id))
                 {
                 const line& targetRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId)); ////redeclarare current road
                 if(!trafficQueues[targetRoad.id].size() || vehicles[trafficQueues[targetRoad.id].back()].positionOnRoad * targetRoad.lg >= CAR_LENGTH+SAFETY_GAP)
@@ -810,14 +895,8 @@ class Simulation
                     transferToRoad(v,ftime,targetRoad.id,1,currentRoad.id);
                     leaderState=LeaderState::ExitedRoad;
                     j--;
-
-                    if(isAdaptive)
-                    {
-                       tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[targetRoad.id]]++; 
-                     
-                       if(v.currentRoadId < i && (step+1) % defaultGreenSteps == 0)
-                            trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ detectionRadius);    
-                    }
+                    
+                    tlmanager.recordRoadChange(v,currentRoad,targetRoad,step);
                     
                  }
                  else if(updateImpatience(v,ftime/tstep)) // impatience processing and rerouting
@@ -836,13 +915,8 @@ class Simulation
                     changedPaths=1;
                     v.currentImpatience-=v.patienceRegen*v.currentImpatience;
                     const line& chosenRoad=city.getLine(nextBestRoadId);
-                    if(isAdaptive)
-                    {
-                       tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[v.currentRoadId]]++; 
-                     
-                       if(v.currentRoadId < i && (step+1) % defaultGreenSteps == 0)
-                            trafficLights[chosenRoad.to].roadsTL[incomingPhaseId[chosenRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *chosenRoad.lg/ detectionRadius);    
-                    }
+                    
+                    tlmanager.recordRoadChange(v,currentRoad,chosenRoad,step);
                     }
                    }
                    
@@ -875,20 +949,7 @@ class Simulation
          }
         
         const line& currentRoad=city.getLine(i);
-         if(isAdaptive && (step+1) % defaultGreenSteps == 0)
-          {  
-            int ind;  
-            for(int e=0; e<trafficLights[currentRoad.to].roadsTL.size(); e++)
-                if(trafficLights[currentRoad.to].roadsTL[e].roadId==currentRoad.id) {ind=e;break;}
-            for(int j=0; j<trafficQueues[i].size(); j++)
-            {
-             
-             const vehicle& v=vehicles[trafficQueues[i][j]];   
-             if(1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius + correction < 0) break;
-             else trafficLights[currentRoad.to].roadsTL[ind].score += 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius;
-             
-            }
-          } 
+        tlmanager.internalRoadScoring(currentRoad,trafficQueues,vehicles,step);
       }
      
 
@@ -898,8 +959,7 @@ class Simulation
          int NoInitVehicles=waitQueues[i].size();
          float lastMovementTime=0; // the last initialized vehicle movement time; 
          float iNextEntry=nextAllowedEntry[i];
-         
-
+        
          while(canProcessNextVehicle && !waitQueues[i].empty())
          {
          float timeSpentMoving=0.0f;
@@ -909,7 +969,6 @@ class Simulation
          v.currentRoadId = city.getNextRoadBetween(v.currentIntersectionId,v.destinationIntersectionId); 
          const line& currentRoad = city.getLine(v.currentRoadId);
          const node& currentIntersection = city.getIntersection(v.currentIntersectionId);
-         trafficLight& tl=trafficLights[currentIntersection.id];  
 
         //if the vehicle has not yet left the waiting queue
         NoInitVehicles--;
@@ -918,7 +977,7 @@ class Simulation
          nextAllowedEntry[v.currentIntersectionId] = v.initTime+v.expectedExternalTime;
 
         }
-        if(ctime >= v.initTime+v.expectedExternalTime && ctime + correction >= nextAllowedEntry[v.currentIntersectionId] && tl.roadsTL[tl.currentState].roadId == externalRoadId && (!trafficQueues[currentRoad.id].size() || vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg + correction >= CAR_LENGTH+SAFETY_GAP))
+        if(ctime >= v.initTime+v.expectedExternalTime && ctime + correction >= nextAllowedEntry[v.currentIntersectionId] && tlmanager.isGreenFor(i,externalRoadId) && (!trafficQueues[currentRoad.id].size() || vehicles[trafficQueues[currentRoad.id].back()].positionOnRoad * currentRoad.lg + correction >= CAR_LENGTH+SAFETY_GAP))
                 {
                  canProcessNextVehicle=1;   
                 v.actualSpawnTime=nextAllowedEntry[v.currentIntersectionId];
@@ -935,18 +994,12 @@ class Simulation
 
                  nextAllowedEntry[v.currentIntersectionId]+= (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;  
                  
-                 if(isAdaptive)
-                    {
-                    tl.roadChangeMatrix[0][outgoingPhaseId[currentRoad.id]]++;
-
-                    if((step+1) % defaultGreenSteps == 0)
-                        trafficLights[currentRoad.to].roadsTL[incomingPhaseId[currentRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ detectionRadius);
-                    }
+                 tlmanager.recordExtRoadChange(v,currentRoad,step);
                 }  
         else if(ctime >= v.initTime+v.expectedExternalTime && ctime + correction >= nextAllowedEntry[v.currentIntersectionId])
         {
                 
-              if(tl.roadsTL[tl.currentState].roadId == externalRoadId)
+              if(tlmanager.isGreenFor(i,externalRoadId))
               {
                 lastMovementTime=(nextAllowedEntry[v.currentIntersectionId] - iNextEntry)/tstep;
 
@@ -974,13 +1027,7 @@ class Simulation
 
                  nextAllowedEntry[v.currentIntersectionId]+= (CAR_LENGTH + SAFETY_GAP) / currentIntersection.externalSpeed;  
                  changedPaths=1;
-                 if(isAdaptive)
-                    {
-                    tl.roadChangeMatrix[0][outgoingPhaseId[targetRoad.id]]++;
-
-                    if((step+1) % defaultGreenSteps == 0)
-                        trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ detectionRadius);
-                    }
+                 tlmanager.recordExtRoadChange(v,targetRoad,step);
                   }
                 }
               
@@ -1026,13 +1073,7 @@ class Simulation
         //general cases
         mstats.addVehicle(lastMovementTime,NoInitVehicles);
         
-        if(isAdaptive && (step+1) % defaultGreenSteps == 0) 
-        {
-         float firstOffset = max(0.0f,nextAllowedEntry[i]-ctime)*city.getIntersection(i).externalSpeed; 
-         for(int e=0; e < waitQueues[i].size(); e++)
-           if( 1.0f - firstOffset/ detectionRadius >0 )  {trafficLights[i].roadsTL[0].score +=  1.0f - firstOffset/ detectionRadius; firstOffset+=CAR_LENGTH+SAFETY_GAP;}
-           else break;
-        }
+        tlmanager.externalRoadScoring(city.getIntersection(i),waitQueues[i].size(),nextAllowedEntry[i]-ctime,step);
       } 
   
     for(int i=0; i<pendingReinitializations.size(); i++)
@@ -1048,12 +1089,12 @@ class Simulation
     if(step)g << mstats.moving << " " << mstats.stationary << " " << mstats.fractionalMoving << " " << mstats.fractionalStationary << '\n';
     else g << 0 <<" " <<0<<  " " << 0 << " " << 0 << '\n';
 
-    for(int i=0; i<trafficLights.size(); i++)
-        g << trafficLights[i].roadsTL[trafficLights[i].currentState].roadId << " ";
+    for(int i=0; i< city.getNoIntersections(); i++)
+        g << tlmanager.getCurrentGreenRoad(i) << " ";
     g << '\n';
     
-    for(int i=0; i<vehicles.size(); i++)
-        if(vehicles[i].isActive) nr++;
+    for(int i=0; i<trafficQueues.size(); i++)
+         nr+=trafficQueues[i].size();
     
     g << nr << '\n';
     
