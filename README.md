@@ -3,8 +3,7 @@
 A C++20 microscopic traffic simulator built as an experimental environment for
 **machine-learning and reinforcement-learning traffic-light control**. The
 project first establishes deterministic, inspectable baselines: fixed-time and
-connected adaptive signals. It does not claim that RL is already implemented;
-instead, it provides a credible environment in which an agent can later be
+connected adaptive signals; provides a credible environment in which an agent can later be
 trained and compared fairly.
 
 Vehicles move through a directed city graph, obey queue spacing and signal
