@@ -9,6 +9,10 @@ add_executable(simulator
     src/main.cpp
 )
 
+target_include_directories(simulator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 target_compile_definitions(simulator PRIVATE
     PROJECT_PATH="${CMAKE_SOURCE_DIR}"
 )
