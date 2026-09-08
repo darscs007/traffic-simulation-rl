@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(simulator
     src/main.cpp
+    src/Graph.cpp
+    src/trafficLightSystem.cpp
+    src/Simulation.cpp
 )
 
 target_include_directories(simulator PRIVATE

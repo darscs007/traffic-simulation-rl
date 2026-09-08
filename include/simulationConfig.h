@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-
+#include <iostream>
 struct simulationConfig
 {
 float CAR_LENGTH = 1.0f;
@@ -43,8 +43,19 @@ std::vector<std::string> validate() const
    if(IMPATIENCE_MULTIPLIER <= 0.0f) errors.push_back("Non-positive impatience multiplier");
    if(fullStepImpatienceReduction < 0.0f) errors.push_back("Negative full-step impatience reduction");
 
-
    return errors;
 }
 
+
 };
+
+inline bool validateAndReportConfig(const simulationConfig& config)
+{
+ std::vector<std::string> errors= config.validate();
+
+ if(!errors.size()) return 1;
+
+ for(int i=0; i< errors.size(); i++)
+      std::cout << errors[i] << '\n';
+  return 0;
+}

@@ -1,5 +1,5 @@
 <!-- const useRawVehiclePositions -->
-<!--const vehicleStartInset, const vehicleEndpointInset to change vehicle insets  -->>
+<!--const vehicleStartInset, const vehicleEndpointInset to change vehicle insets  -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -46,11 +46,6 @@
     .impatience-bubble { fill: #fff7ed; stroke: #ef4444; stroke-width: .12; filter: drop-shadow(0 0 .22px #ef4444); }
     .impatience-emoji { font-size: 1.25px; text-anchor: middle; dominant-baseline: middle; }
     .impatience-tail { opacity: .62; }
-    .birthday-greeting { padding: 9px 4px 4px; text-align: center; color: #315f9c; }
-    .birthday-decoration { display: flex; align-items: center; gap: 7px; color: #8aa9cb; font-size: 12px; }
-    .birthday-decoration::before, .birthday-decoration::after { content: ''; flex: 1; height: 1px; background: #c9d9ea; }
-    .birthday-title { margin: 3px 0 1px; color: #315f9c; font-family: "Segoe Script", "Brush Script MT", cursive; font-size: 29px; line-height: 1.05; }
-    .birthday-note { margin: 0; color: #6b8cb1; font-family: "Palatino Linotype", Georgia, serif; font-size: 11px; font-style: italic; letter-spacing: .3px; }
     .vehicle-label { fill: #fff; font-size: 1px; text-anchor: middle; dominant-baseline: middle; font-weight: 700; }
     .error { color: #b42318; }
     .road-label {fill: #fff;font-size: 1.2px;text-anchor: middle;dominant-baseline: middle;font-weight: 600;}
@@ -78,10 +73,6 @@
       </div>
       <div class="side-column">
         <aside id="trip-statistics" class="trip-statistics" aria-live="polite"></aside>
-        <section id="birthday-greeting" class="birthday-greeting" hidden aria-label="Birthday greeting">
-          <div class="birthday-decoration">✦</div>
-          <div class="birthday-title">Happy Birthday<span id="birthday-name"></span>!</div>
-        </section>
       </div>
     </div>
   </main>
@@ -92,8 +83,6 @@
     const frameLabel = document.getElementById('frame');
     const statistics = document.getElementById('statistics');
     const tripStatisticsPanel = document.getElementById('trip-statistics');
-    const birthdayGreeting = document.getElementById('birthday-greeting');
-    const birthdayName = document.getElementById('birthday-name');
     const previous = document.getElementById('previous');
     const next = document.getElementById('next');
     const run = document.getElementById('run');
@@ -115,11 +104,6 @@
     const vehicleEndpointInset = 2.9;
     const impatienceLingerSteps = 10;
     const useEmojiForImpatience = true; // false = red dot, true = emoji with visual tail
-    const birthdayPerson = 'ANABEL'; 
-    const today = new Date();
-    birthdayGreeting.hidden = !(today.getMonth() === 8 && today.getDate() === 5);
-    birthdayName.textContent = birthdayPerson ? `, ${birthdayPerson}` : '';
-
     const make = (tag, attrs = {}) => {
       const el = document.createElementNS(ns, tag);
       Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
