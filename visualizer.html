@@ -63,6 +63,7 @@
       <button type="button" id="next">Step ahead</button>
       <button type="button" id="run">Run</button>
       <button type="button" id="pause" disabled>Pause</button>
+      <button type="button" id="reload-map">Reload map</button>
       <input id="frame-slider" type="range" min="0" value="0" aria-label="Step of the simulation">
       <output id="frame" class="frame" aria-live="polite">Step 0 / 0</output>
     </div>
@@ -87,12 +88,11 @@
     const next = document.getElementById('next');
     const run = document.getElementById('run');
     const pause = document.getElementById('pause');
+    const reloadMap = document.getElementById('reload-map');
     const ns = 'http://www.w3.org/2000/svg';
-    let lastNetwork = '';
     let frames = [];
     let currentFrame = 0;
     let running = null;
-    let mapHeight = 0;
     let vehiclesLayer;
     let traceNotice = '';
     let nodesById = new Map();
@@ -201,8 +201,8 @@
         if (!road) return;
         const from = nodesById.get(road.from);
         const to = nodesById.get(road.to);
-        const start = { x: from.x, y: mapHeight - from.y };
-        const end = { x: to.x, y: mapHeight - to.y };
+        const start = { x: from.x, y: -from.y };
+        const end = { x: to.x, y: -to.y };
         const lane = lanePoints(road, start, end);
         const position = visualRoadPosition(lane, vehicle.position);
         const x = lane.from.x * (1 - position) + lane.to.x * position;
@@ -317,7 +317,7 @@
       phases.forEach((roadId, intersectionId) => {
         const intersection = nodesById.get(intersectionId);
         if (!intersection) return;
-        const nodePoint = { x: intersection.x, y: mapHeight - intersection.y };
+        const nodePoint = { x: intersection.x, y: -intersection.y };
 
         if (roadId === -2) {
           vehiclesLayer.append(make('circle', {
@@ -335,7 +335,7 @@
         if (!road || road.to !== intersectionId) return;
         const from = nodesById.get(road.from);
         if (!from) return;
-        const lane = lanePoints(road, { x: from.x, y: mapHeight - from.y }, nodePoint);
+        const lane = lanePoints(road, { x: from.x, y: -from.y }, nodePoint);
         const dx = lane.to.x - lane.from.x;
         const dy = lane.to.y - lane.from.y;
         const length = Math.hypot(dx, dy);
@@ -378,17 +378,21 @@
 
     function draw(nodes, roads) {
       svg.replaceChildren();
-      const maxX = Math.max(...nodes.map(node => node.x));
-      const maxY = Math.max(...nodes.map(node => node.y));
+      const maxAbsX = Math.max(...nodes.map(node => Math.abs(node.x)), 1);
+      const maxAbsY = Math.max(...nodes.map(node => Math.abs(node.y)), 1);
       const gridStep = 10;
-      const width = Math.ceil(maxX / gridStep) * gridStep;
-      const height = Math.ceil(maxY / gridStep) * gridStep;
-      mapHeight = height;
-      svg.setAttribute('viewBox', `${-8} ${-8} ${width + 20} ${height + 20}`);
+      const halfWidth = Math.ceil(maxAbsX / gridStep) * gridStep;
+      const halfHeight = Math.ceil(maxAbsY / gridStep) * gridStep;
+      const viewPadding = 10;
+      svg.setAttribute(
+        'viewBox',
+        `${-halfWidth - viewPadding} ${-halfHeight - viewPadding} ` +
+        `${2 * (halfWidth + viewPadding)} ${2 * (halfHeight + viewPadding)}`
+      );
       const byId = new Map(nodes.map(node => [node.id, node]));
       nodesById = byId;
       roadsById = new Map(roads.map(road => [road.id, road]));
-      const point = node => ({ x: node.x, y: height - node.y });
+      const point = node => ({ x: node.x, y: -node.y });
 
       const defs = make('defs');
       const greenGlow = make('filter', { id: 'green-glow', x: '-100%', y: '-100%', width: '300%', height: '300%' });
@@ -399,13 +403,13 @@
       defs.append(arrow);
       svg.append(defs);
 
-      for (let x = 0; x <= width; x += gridStep) {
-        svg.append(make('line', { class: x === 0 ? 'axis' : 'grid', x1: x, y1: 0, x2: x, y2: height }));
-        const label = make('text', { class: 'tick', x, y: height + 5 }); label.textContent = x; svg.append(label);
+      for (let x = -halfWidth; x <= halfWidth; x += gridStep) {
+        svg.append(make('line', { class: x === 0 ? 'axis' : 'grid', x1: x, y1: -halfHeight, x2: x, y2: halfHeight }));
+        const label = make('text', { class: 'tick', x, y: halfHeight + 5 }); label.textContent = x; svg.append(label);
       }
-      for (let y = 0; y <= height; y += gridStep) {
-        svg.append(make('line', { class: y === 0 ? 'axis' : 'grid', x1: 0, y1: y, x2: width, y2: y }));
-        const label = make('text', { class: 'tick', x: -4, y: y + .8 }); label.textContent = height - y; svg.append(label);
+      for (let y = -halfHeight; y <= halfHeight; y += gridStep) {
+        svg.append(make('line', { class: y === 0 ? 'axis' : 'grid', x1: -halfWidth, y1: y, x2: halfWidth, y2: y }));
+        const label = make('text', { class: 'tick', x: -4, y: y + .8 }); label.textContent = -y; svg.append(label);
       }
 
       directedRoads = new Set(roads.map(road => `${road.from}-${road.to}`));
@@ -453,21 +457,20 @@ svg.append(label);
     }
 
     async function reloadNetwork() {
+      reloadMap.disabled = true;
       try {
         const [intersections, roads] = await Promise.all([
           fetch(`data/intersections.csv?${Date.now()}`).then(response => response.text()),
           fetch(`data/roads.csv?${Date.now()}`).then(response => response.text())
         ]);
-        const fingerprint = intersections + roads;
-        if (fingerprint !== lastNetwork) {
-          draw(parseCsv(intersections), parseCsv(roads));
-          lastNetwork = fingerprint;
-        }
+        draw(parseCsv(intersections), parseCsv(roads));
         status.className = traceNotice ? 'error' : '';
         status.textContent = traceNotice || 'Reload network: OK';
       } catch {
         status.className = 'error';
         status.textContent = 'Open page through bat file';
+      } finally {
+        reloadMap.disabled = false;
       }
     }
 
@@ -501,10 +504,10 @@ svg.append(label);
       pause.disabled = false;
     });
     pause.addEventListener('click', stop);
+    reloadMap.addEventListener('click', reloadNetwork);
 
     reloadNetwork();
     loadTrace();
-    setInterval(reloadNetwork, 1000);
   </script>
 </body>
 </html>

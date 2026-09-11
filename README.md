@@ -1,20 +1,23 @@
-# Traffic Simulation for Adaptive Control and Reinforcement Learning
+﻿# Traffic Simulation for Adaptive Control and Reinforcement Learning
 
-A C++20 microscopic traffic simulator built as an experimental environment for
-**machine-learning and reinforcement-learning traffic-light control**. The
-project first establishes deterministic, inspectable baselines: fixed-time and
-connected adaptive signals; provides a credible environment in which an agent can later be
-trained and compared fairly.
+A C++20 microscopic traffic laboratory built for **machine-learning and reinforcement-learning traffic-light control**. Before an RL agent is allowed to touch the signals, the project builds the part that matters most: a city whose queues, spillback, rerouting, and congestion can be inspected step by step.
 
-Vehicles move through a directed city graph, obey queue spacing and signal
-phases, react to blocked green movements, and may reroute when sufficiently
-impatient. Every simulation step is exported to a browser visualizer, making
-controller decisions and their consequences inspectable.
+Vehicles travel through a directed city graph, keep safe spacing, obey signal phases, wait at blocked green movements, and may choose another route when impatience wins. Every step is exported to a browser visualizer, so a policy is never a black box: its decisions can be watched turning into free flow, local jams, or full gridlock.
 
 ## Demo
+
+
+
 <p align="center">
-<img src="assets/adaptive.png" alt ="Adaptive traffic-light controller" width="900">
-<br>
+  <img src="assets/largecity.png" alt="Traffic simulator demo" width="900">
+  <br>
+  <em>Large generated city.</em>
+</p>
+
+
+<p align="center">
+  <img src="assets/adaptive.png" alt="Adaptive traffic-light controller" width="900">
+  <br>
   <em>Figure 1. Adaptive controller (`isAdaptive = true`).</em>
 </p>
 
@@ -26,55 +29,51 @@ controller decisions and their consequences inspectable.
 
 ## Why this project
 
-Traffic-light control is a sequential decision problem: a local green phase can
-reduce an immediate queue while creating downstream congestion. This simulator
-supports controlled comparisons among:
+Traffic-light control is a sequential decision problem: a local green phase can reduce an immediate queue while creating downstream congestion. This simulator supports controlled comparisons among:
 
 - fixed-time traffic lights;
 - demand-aware adaptive traffic lights;
 - a future RL controller acting through the same signal interface.
 
-The trace records movement, waiting, trip-delay, signal-phase, and driver-state
-data. These measurements can become RL observations and rewards, while the
-non-RL controllers remain reproducible baselines.
+The trace records movement, waiting, trip-delay, signal-phase, and driver-state data. These measurements can become RL observations and rewards, while the non-RL controllers remain reproducible baselines.
 
 ## Current capabilities
 
-- Directed road graph loaded from CSV, with validation of IDs, endpoints,
-  lengths, and speed limits.
+- Directed road graph loaded from CSV, with validation of IDs, endpoints, lengths, and speed limits.
 - Free-flow shortest paths based on road travel time (`length / speed`).
 - Origin/destination demand sampling with a fixed seed for reproducible runs.
-- External entry queues and per-road `deque` traffic queues with vehicle length
-  and safety-gap constraints.
-- Per-intersection signal phases: one external queue or one incoming road is
-  green at a time.
-- Static and adaptive traffic-light modes selected by
-  `simulationConfig::isAdaptive`.
-- Adaptive allocation based on distance-weighted detector demand, observed turn
-  proportions, and estimated downstream availability.
-- Individual drivers with sampled impatience thresholds and recovery behavior.
-  An impatient driver may choose an available alternative road; attempted
-  reroutes are remembered for the remainder of the trip.
-- Browser visualizer for roads, vehicles, active phases, trip metrics, and
-  impatient-driver indicators.
+- External entry queues and per-road `deque` traffic queues with vehicle length and safety-gap constraints.
+- Per-intersection signal phases: one external queue or one incoming road is green at a time.
+- Static and adaptive traffic-light modes selected by `simulationConfig::isAdaptive`.
+- Adaptive allocation based on distance-weighted detector demand, observed turn proportions, and estimated downstream availability.
+- Individual drivers with sampled impatience thresholds and recovery behavior. An impatient driver may choose an available alternative road; attempted reroutes are remembered for the remainder of the trip.
+- Emergent congestion behaviour: localized queues, spillback across intersections, throughput collapse under overload, and gridlock under extreme demand.
+- Browser visualizer for roads, vehicles, active phases, trip metrics, and impatient-driver indicators.
+
+## Procedural city generator
+
+`generator` creates a city instead of requiring one to be drawn by hand. It samples intersection locations with a configurable minimum separation, indexes them in a spatial grid, then uses a minimum spanning tree as a connected backbone. Additional local candidate streets are accepted only when they pass geometric intersection checks.
+
+The generator can produce one-way and two-way streets, assign speeds from location and controlled randomness, reduce unnatural triangle density, and derive demand weights that favour departures from the outskirts and destinations near the centre. Its output is directly consumable by the simulator:
+
+```text
+data/intersections.csv
+data/roads.csv
+data/demand.csv
+```
 
 ## Metrics
 
-The simulator reports completed-trip delay for the external queue, internal
-network, and entire trip. Each segment has two complementary aggregates:
+The simulator reports completed-trip delay for the external queue, internal network, and entire trip. Each segment has two complementary aggregates:
 
 | Metric | Formula | Meaning |
 | --- | --- | --- |
 | Average vehicle | `sum(actual / expected) / N` | Experience of a typical completed driver. |
 | Time-weighted | `sum(actual) / sum(expected)` | Aggregate travel-time burden. |
 
-Expected internal time is the free-flow shortest-path time. Expected external
-time is based on queue headway at initialization. A value of `1.25` means the
-actual time was 25% above its expected baseline.
+Expected internal time is the free-flow shortest-path time. Expected external time is based on queue headway at initialization. A value of `1.25` means the actual time was 25% above its expected baseline.
 
-Every frame also contains integer and fractional moving/stationary counts.
-Fractional values preserve partial movement within a time step, which is useful
-for later reward design (Note: when a vehicle reaches its destination, the fractional count may be lower than the integer one)
+Every frame also contains integer and fractional moving/stationary counts. Fractional values preserve partial movement within a time step, which is useful for later reward design. When a vehicle reaches its destination, the fractional count can be lower than the integer count by design.
 
 ## Architecture
 
@@ -85,15 +84,14 @@ for later reward design (Note: when a vehicle reaches its destination, the fract
 | `Graph` | City loading, validation, and shortest-path data. |
 | `trafficLightSystem` | Signal phases, adaptive scoring, and downstream availability. |
 | `simulationConfig` | Centralized parameters and validation. **Toggle `isAdaptive` here.** |
+| `cityGenerator` | Procedural planar-city generation, road geometry, and demand generation. |
 | `visualizer.html` | Interactive browser trace viewer. |
 
-The planned RL layer will select signal phases or durations through a narrow
-controller interface rather than changing vehicle-movement logic directly.
+The planned RL layer will select signal phases or durations through a narrow controller interface rather than changing vehicle-movement logic directly.
 
 ## Build and run
 
-Requirements: CMake 3.20+, a C++20 compiler, and Python 3 for the local
-visualizer server.
+Requirements: CMake 3.20+, a C++20 compiler, and Python 3 for the local visualizer server.
 
 From the repository root:
 
@@ -103,8 +101,16 @@ cmake --build build --config Release
 .\build\Release\simulator.exe
 ```
 
-For a single-config generator such as Ninja, run `./build/simulator.exe`
-instead. The simulator overwrites `output/output.out`.
+For a single-config generator such as Ninja, run `./build/simulator.exe` instead. The simulator overwrites `output/output.out`.
+
+To create a fresh city and its demand data:
+
+```powershell
+cmake --build build --target generator --config Release
+.\build\Release\generator.exe
+```
+
+Run the generator before the simulator whenever you want to replace the current city. Keep generated CSV files under version control when they represent a reproducible experiment.
 
 Then start the visualizer:
 
@@ -112,8 +118,7 @@ Then start the visualizer:
 .\start_visualizer.bat
 ```
 
-Open `http://localhost:8000/visualizer.html` if it does not open
-automatically. Refresh the page after generating a new trace.
+Open `http://localhost:8000/visualizer.html` if it does not open automatically. Refresh the page after generating a new trace.
 
 ## Input data
 
@@ -123,37 +128,32 @@ automatically. Refresh the page after generating a new trace.
 | `data/roads.csv` | Directed roads: source, destination, length, speed limit, ID. |
 | `data/demand.csv` | Origin and destination sampling weights. |
 
-Road and intersection IDs are assumed to be consecutive from zero. A two-way
-street is represented by two directed road records.
+Road and intersection IDs are assumed to be consecutive from zero. A two-way street is represented by two directed road records.
 
 ## Repository layout
 
 ```text
 include/     Public class declarations and shared types
-src/         C++ implementations and program entry point
-data/        CSV city graph and demand inputs
+src/         C++ implementations, simulation entry point, and city generator
+data/        Generated or hand-authored city graph and demand inputs
 output/      Generated simulation trace
+assets/      README screenshots and demo media
 visualizer.html
 start_visualizer.bat
 ```
 
 ## Model scope and limitations
 
-The current model intentionally uses one lane per directed road and one green
-movement per intersection. It does not yet simulate turning lanes, pedestrians,
-yellow/all-red intervals, or simultaneous non-conflicting movements.
+The current model intentionally uses one lane per directed road and one green movement per intersection. It does not yet simulate turning lanes, pedestrians, yellow/all-red intervals, or simultaneous non-conflicting movements.
 
-Road processing is currently order-dependent: a vehicle may fail to enter a
-road that becomes available later in the same time step. This is a known
-approximation; a synchronized reservation/transfer phase is planned.
+Road processing is currently order-dependent: a vehicle may fail to enter a road that becomes available later in the same time step. This is a known approximation; a synchronized reservation/transfer phase is planned.
 
-The current route precomputation is suitable for small experimental networks,
-but should use priority-queue Dijkstra before large-scale city generation.
+The current route precomputation is suitable for small experimental networks, but should use priority-queue Dijkstra before large-scale city generation.
 
 ## Next steps
 
-- Add a city generator and stronger graph/geometry validation.
+- Add more generator styles, including hierarchical arterial layouts using L-trees.
+- Code optimisations: Dijkstra with priority queue, generator peformance
 - Replace order-dependent transfers with synchronized updates.
 - Add automated tests for spacing, routing, trace consistency, and metrics.
-- Define an RL observation/action/reward interface and benchmark it against
-  the existing static and adaptive controllers.
+- Define an RL observation/action/reward interface and benchmark it against the existing static and adaptive controllers.
