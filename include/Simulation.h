@@ -11,6 +11,33 @@
 #include <fstream>
 #include "vehicle.h"
 
+struct stepMovementStats
+  {
+    const simulationConfig& config;
+    int moving=0;
+    int stationary=0;
+    float fractionalMoving=0.0f;
+    float fractionalStationary=0.0f;
+  
+    stepMovementStats(const simulationConfig& config)
+      : config(config)
+    {}
+
+    void addVehicle(float movementFraction, int count)
+    {
+      if(movementFraction <= config.correction) stationary+=count;
+      else moving+=count;
+
+      if(movementFraction <= config.correction) fractionalStationary+=count;
+      else if(movementFraction + config.correction >= 1.0f) fractionalMoving+=count;
+      else
+      {
+      fractionalMoving+=movementFraction * count;
+      fractionalStationary+= (1.0f - movementFraction) *count;
+      }
+    }
+  };
+
 struct TripStatistics
   {
   float taExtTime=0.0f;
@@ -64,6 +91,10 @@ class Simulation
   void initializeVehicles();
 
   void reinitializeVehicle(int id); // and calculating trip statistics
+
+  bool mustWait(const line& currentRoad, const std::vector<bool>& isWaiting);
+
+  void updateIntRoad(int i, int step, const line& currentRoad,stepMovementStats& mstats, std::vector<int>& pendingReinitializations);
   
   void oneStep(int step);
   

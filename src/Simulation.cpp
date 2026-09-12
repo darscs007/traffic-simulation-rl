@@ -12,34 +12,6 @@
   Blocked,
   ExitedRoad
 };
-
-  struct stepMovementStats
-  {
-    const simulationConfig& config;
-    int moving=0;
-    int stationary=0;
-    float fractionalMoving=0.0f;
-    float fractionalStationary=0.0f;
-  
-    stepMovementStats(const simulationConfig& config)
-      : config(config)
-    {}
-
-    void addVehicle(float movementFraction, int count)
-    {
-      if(movementFraction <= config.correction) stationary+=count;
-      else moving+=count;
-
-      if(movementFraction <= config.correction) fractionalStationary+=count;
-      else if(movementFraction + config.correction >= 1.0f) fractionalMoving+=count;
-      else
-      {
-      fractionalMoving+=movementFraction * count;
-      fractionalStationary+= (1.0f - movementFraction) *count;
-      }
-    }
-  };
-
   
   void Simulation::transferToRoad(vehicle &v, float ftime, int targetRoadId, bool trafficQueue, int sourceId) 
   {
@@ -202,22 +174,47 @@
       waitQueues[v.currentIntersectionId].push_back(v.id);
   }
 
-  void Simulation::oneStep(int step) 
+  bool Simulation::mustWait(const line& currentRoad, const std::vector<bool>& isWaiting)
   {
-    stepMovementStats mstats(config);
-    std::vector<int> pendingReinitializations;
+     if (!trafficQueues[currentRoad.id].size())
+          return 0;
 
-    tlmanager.updateTrafficLights(step,city);
+     if(!tlmanager.isGreenFor(currentRoad.to, currentRoad.id)) 
+        return 0;
+    
+    const vehicle& v=vehicles[trafficQueues[currentRoad.id][0]];
+    if((1.0f-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed > tstep) 
+        return 0;
 
-    for(int i=0; i<city.getNoRoads(); i++)
-      {
+    if (currentRoad.to == v.destinationIntersectionId) return 0;
+    
+    const line& targetRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId));
+    if(targetRoad.id < currentRoad.id && !isWaiting[targetRoad.id]) 
+        return 0;
+
+    if(!trafficQueues[targetRoad.id].size()) 
+        return 0;
+
+    float ftime=tstep - (1.0f-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
+    if(ftime*targetRoad.maxspeed < vehicles[trafficQueues[targetRoad.id].back()].positionOnRoad * targetRoad.lg - config.SAFETY_GAP - config.CAR_LENGTH) 
+        return 0;
+
+    if(!tlmanager.isGreenFor(targetRoad.to,targetRoad.id) && targetRoad.lg - (trafficQueues[targetRoad.id].size()+1)*(config.CAR_LENGTH+config.SAFETY_GAP) < 0) 
+        return 0;
+
+    return 1;
+  }
+
+  void Simulation::updateIntRoad(int i, int step, const line& currentRoad,stepMovementStats& mstats, std::vector<int>& pendingReinitializations)
+  {
+        
+
         float leaderAdvance=-1;
         LeaderState leaderState = LeaderState::NoLeader;
         
         for(int j=0; j<trafficQueues[i].size(); j++)
         {
         bool changedPaths=0;    
-        const line &currentRoad=city.getLine(i);
         vehicle &v=vehicles[trafficQueues[i][j]];
 
          if(v.lastStepProcessed==step) continue;
@@ -284,7 +281,7 @@
                 leaderState=LeaderState::Blocked; // attemts reaching the next road
                 if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id))
                 {
-                const line& targetRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId)); ////redeclarare current road
+                const line& targetRoad= city.getLine(city.getNextRoadBetween(currentRoad.to,v.destinationIntersectionId)); 
                 if(!trafficQueues[targetRoad.id].size() || vehicles[trafficQueues[targetRoad.id].back()].positionOnRoad * targetRoad.lg >= config.CAR_LENGTH+config.SAFETY_GAP)
                 {
                     
@@ -344,12 +341,56 @@
           v.isImpatient = changedPaths || v.currentImpatience > v.impatienceThreshold;
          }
         
-        const line& currentRoad=city.getLine(i);
         tlmanager.internalRoadScoring(currentRoad,trafficQueues,vehicles,step);
-      }
-     
 
-      for(int i=0; i<waitQueues.size(); i++)
+  }
+
+  void Simulation::oneStep(int step) 
+  {
+    //adding a pair vector and a deque vector that will retain the precedence for parsing
+    //std::vector<int> waitingPredecessors(city.getNoIntersections(),-1); more time efficient if there are numerous waiting roads, to be implemented
+    std::vector<std::pair<int,int>> pairs;
+    std::vector<std::deque<int>> lists;
+    std::vector<bool> isWaiting;
+    isWaiting.resize(city.getNoRoads(),0);
+
+    stepMovementStats mstats(config);
+    std::vector<int> pendingReinitializations;
+
+    tlmanager.updateTrafficLights(step,city);
+
+    for(int i=0; i<city.getNoRoads(); i++)
+      {
+        const line &currentRoad=city.getLine(i);
+        //checking first vehicle/traffic light// next road for order errors
+        if(mustWait(currentRoad,isWaiting))
+        {
+          pairs.push_back({ currentRoad.id,city.getLine(city.getNextRoadBetween(currentRoad.to,vehicles[trafficQueues[currentRoad.id][0]].destinationIntersectionId)).id });
+          isWaiting[currentRoad.id]=1;
+          continue;
+        }
+
+        updateIntRoad(i,step,currentRoad,mstats,pendingReinitializations);
+
+      }
+
+    //making queues of order
+    for(int i=pairs.size()-1; i >=0; i--)
+    {
+      bool foundList=0;
+      for(int j=0; j < lists.size(); j++)
+        if(lists[j][0] ==pairs[i].second){lists[j].push_front(pairs[i].first); foundList=1;}
+        else if(lists[j].back() == pairs[i].first){lists[j].push_back(pairs[i].second); foundList=1;}
+
+        if(!foundList) lists.push_back({pairs[i].first,pairs[i].second});
+    }
+     
+    //here parsing the remaining roads
+    for(int i=0; i<lists.size(); i++)
+      for(int j=lists[i].size()-2; j>=0; j--)
+        updateIntRoad(lists[i][j],step, city.getLine(lists[i][j]),mstats,pendingReinitializations);
+    
+    for(int i=0; i<waitQueues.size(); i++)
         {
          bool canProcessNextVehicle=1; 
          int NoInitVehicles=waitQueues[i].size();
