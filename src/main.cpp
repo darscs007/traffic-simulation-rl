@@ -8,6 +8,7 @@
 #include "Simulation.h"
 
 std::string outputFileName = std::string(PROJECT_PATH) + "/output/output.out";
+
 std::ofstream g(outputFileName);
 
 int main() 

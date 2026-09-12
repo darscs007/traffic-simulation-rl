@@ -13,7 +13,7 @@
   ExitedRoad
 };
   
-  void Simulation::transferToRoad(vehicle &v, float ftime, int targetRoadId, bool trafficQueue, int sourceId) 
+  void Simulation::transferToRoad(vehicle &v, double ftime, int targetRoadId, bool trafficQueue, int sourceId) 
   {
     const line& targetRoad=city.getLine(targetRoadId);
 
@@ -87,7 +87,7 @@
 
   }
 
-  void Simulation::setTime(float ctime, float tstep)
+  void Simulation::setTime(double ctime, double tstep)
   {
     this->ctime = ctime;
     this->tstep = tstep;
@@ -109,7 +109,7 @@
     waitQueues.resize(city.getNoIntersections());
     trafficQueues.resize(city.getNoRoads());
     vehicles.resize(config.maxcars);
-    nextAllowedEntry.resize(city.getNoIntersections(), 0.0f);
+    nextAllowedEntry.resize(city.getNoIntersections(), 0.0);
 
     for(int i=0; i<config.maxcars; i++)
     {
@@ -125,7 +125,7 @@
 
       v.id=i;
       v.expectedExternalTime=(waitQueues[v.currentIntersectionId].size()-1) * (config.CAR_LENGTH + config.SAFETY_GAP) / currentIntersection.externalSpeed;
-      v.initTime=0.0f;
+      v.initTime=0.0;
       
       v.impatienceThreshold=impatienceTresh(patienceRng);
       while(v.impatienceThreshold < config.MEAN_IMPATIENCE_THRESHOLD-30 || v.impatienceThreshold > config.MEAN_IMPATIENCE_THRESHOLD+30) v.impatienceThreshold=impatienceTresh(patienceRng);
@@ -143,7 +143,7 @@
   {
      vehicle &v=vehicles[id];
     
-    if(v.initTime+v.expectedExternalTime != 0.0f)
+    if(v.initTime+v.expectedExternalTime != 0.0)
      {
       tripStats.noTrips++;
       tripStats.teIntTime+=city.getTimeBetween(v.startIntersectionId,v.destinationIntersectionId);
@@ -167,7 +167,7 @@
       if(!waitQueues[v.currentIntersectionId].size()) nextAllowedEntry[v.currentIntersectionId]=v.initTime+v.expectedExternalTime;
       
       v.lastStepProcessed=-1;
-      v.positionOnRoad=v.isActive=v.endTime=v.isImpatient=v.actualSpawnTime=0;
+      v.positionOnRoad=v.isActive=v.endTime=v.isImpatient=v.actualSpawnTime=0.0;
       v.currentImpatience = 0.0f;
       v.forbiddenRoads.clear();
       
@@ -195,7 +195,7 @@
     if(!trafficQueues[targetRoad.id].size()) 
         return 0;
 
-    float ftime=tstep - (1.0f-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
+    double ftime=tstep - (1.0f-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
     if(ftime*targetRoad.maxspeed < vehicles[trafficQueues[targetRoad.id].back()].positionOnRoad * targetRoad.lg - config.SAFETY_GAP - config.CAR_LENGTH) 
         return 0;
 
@@ -207,8 +207,6 @@
 
   void Simulation::updateIntRoad(int i, int step, const line& currentRoad,stepMovementStats& mstats, std::vector<int>& pendingReinitializations)
   {
-        
-
         float leaderAdvance=-1;
         LeaderState leaderState = LeaderState::NoLeader;
         
@@ -238,7 +236,7 @@
                }
             else 
                {
-                float ftime= tstep - (vehicles[trafficQueues[i][j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
+                double ftime= tstep - (vehicles[trafficQueues[i][j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
                 
                 v.positionOnRoad = vehicles[trafficQueues[i][j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg; 
                 leaderState= LeaderState::Blocked;
@@ -256,7 +254,7 @@
                    if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id)) 
                     { 
                     
-                    float ftime=(1-initPos) * currentRoad.lg/currentRoad.maxspeed;
+                    double ftime=(1-initPos) * currentRoad.lg/currentRoad.maxspeed;
                     mstats.fractionalMoving+=ftime/tstep;
                     mstats.moving++; //special case of stats calculation
 
@@ -277,7 +275,7 @@
               } 
              else 
                {
-                float ftime= (v.positionOnRoad - 1) * currentRoad.lg / currentRoad.maxspeed;
+                double ftime= (v.positionOnRoad - 1) * currentRoad.lg / currentRoad.maxspeed;
                 leaderState=LeaderState::Blocked; // attemts reaching the next road
                 if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id))
                 {
@@ -327,7 +325,7 @@
          if(didNotExit)
          {
            const line& finalRoad=city.getLine(v.currentRoadId);
-           float ftime;
+           double ftime;
            if(currentRoad.id != finalRoad.id)
              ftime= (1-initPos) * currentRoad.lg/currentRoad.maxspeed + v.positionOnRoad * finalRoad.lg/finalRoad.maxspeed;
             
@@ -335,7 +333,7 @@
               ftime=(v.positionOnRoad-initPos) * currentRoad.lg/currentRoad.maxspeed;
             
            mstats.addVehicle(ftime/tstep,1);
-           if(ftime/tstep + config.correction >= 0.9f)v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction
+           if(ftime/tstep + config.correction >= 0.9)v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction
          }   
           
           v.isImpatient = changedPaths || v.currentImpatience > v.impatienceThreshold;
@@ -394,12 +392,12 @@
         {
          bool canProcessNextVehicle=1; 
          int NoInitVehicles=waitQueues[i].size();
-         float lastMovementTime=0; // the last initialized vehicle movement time; 
-         float iNextEntry=nextAllowedEntry[i];
+         double lastMovementTime=0; // the last initialized vehicle movement time; 
+         double iNextEntry=nextAllowedEntry[i];
         
          while(canProcessNextVehicle && !waitQueues[i].empty())
          {
-         float timeSpentMoving=0.0f;
+         double timeSpentMoving=0.0;
          bool changedPaths=0;
          canProcessNextVehicle=0;
          vehicle &v=vehicles[waitQueues[i].front()];  
@@ -418,16 +416,16 @@
                 {
                  canProcessNextVehicle=1;   
                 v.actualSpawnTime=nextAllowedEntry[v.currentIntersectionId];
-                float ftime=ctime-nextAllowedEntry[v.currentIntersectionId];
+                double ftime=ctime-nextAllowedEntry[v.currentIntersectionId];
                  
                 transferToRoad(v,ftime, currentRoad.id,0,i);
 
-                float moveTime=v.positionOnRoad*currentRoad.lg/currentRoad.maxspeed; //on internal Road
+                double moveTime=v.positionOnRoad*currentRoad.lg/currentRoad.maxspeed; //on internal Road
                 timeSpentMoving=nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime;
                 
-                 lastMovementTime=1.0f;
+                 lastMovementTime=1.0;
               
-                 if((nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep+config.correction >= 0.9f)v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction   
+                 if((nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime)/tstep+config.correction >= 0.9)v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction   
 
                  nextAllowedEntry[v.currentIntersectionId]+= (config.CAR_LENGTH + config.SAFETY_GAP) / currentIntersection.externalSpeed;  
                  
@@ -448,18 +446,18 @@
                   
                 if(nextBestRoadId != -1)
                 { 
-                 lastMovementTime=1.0f;
+                 lastMovementTime=1.0;
                  canProcessNextVehicle=1;   
                  v.isActive=1;
                  v.forbiddenRoads.push_back(nextBestRoadId);
                  v.currentImpatience -= v.patienceRegen * v.currentImpatience;
                  const line& targetRoad=city.getLine(nextBestRoadId); //redeclarare current Road
                 v.actualSpawnTime=nextAllowedEntry[v.currentIntersectionId];
-                float ftime=ctime-nextAllowedEntry[v.currentIntersectionId];
+                double ftime=ctime-nextAllowedEntry[v.currentIntersectionId];
 
                 transferToRoad(v,ftime,nextBestRoadId,0,v.currentIntersectionId);     
 
-                 float moveTime=v.positionOnRoad*targetRoad.lg/targetRoad.maxspeed;
+                 double moveTime=v.positionOnRoad*targetRoad.lg/targetRoad.maxspeed;
                  timeSpentMoving=nextAllowedEntry[v.currentIntersectionId]-iNextEntry+moveTime;
 
                  nextAllowedEntry[v.currentIntersectionId]+= (config.CAR_LENGTH + config.SAFETY_GAP) / currentIntersection.externalSpeed;  
@@ -470,7 +468,7 @@
               
               if(!changedPaths)
               { 
-              float firstOffset = std::max(0.0f,nextAllowedEntry[i]-ctime) * city.getIntersection(i).externalSpeed ; //changed 
+              double firstOffset = std::max(0.0,nextAllowedEntry[i]-ctime) * city.getIntersection(i).externalSpeed ; //changed 
 
               for(int e=1; e < waitQueues[i].size(); e++)
                     if( 1.0f - firstOffset/ config.vehicleDetectionRadius > 0)  
@@ -498,7 +496,7 @@
         else
         {
             v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction
-            lastMovementTime=1.0f;
+            lastMovementTime=1.0;
             timeSpentMoving=tstep;
         }
         

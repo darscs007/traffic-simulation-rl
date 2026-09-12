@@ -2,6 +2,7 @@
 #include "Graph.h"
 #include "trafficConstraints.h"
 #include <algorithm>
+#include <fstream>
 
 
   trafficLightSystem::trafficLightSystem(const simulationConfig& config)
@@ -94,9 +95,12 @@
          for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
             {
              
+
+
              trafficLights[i].roadsTL[j].greenSteps=  config.minGreenSteps;
              usedSteps+=trafficLights[i].roadsTL[j].greenSteps;
              totalSteps+=trafficLights[i].roadsTL[j].greenSteps;
+
             }
          
          for(int j=0; j<trafficLights[i].roadsTL.size(); j++)
@@ -200,11 +204,11 @@
           } 
   } 
 
-  void trafficLightSystem::externalRoadScoring(const node& currentIntersection, int queSize,float timeFromIntersection ,int step)
+  void trafficLightSystem::externalRoadScoring(const node& currentIntersection, int queSize, double timeFromIntersection ,int step)
   {
   if(config.isAdaptive && (step+1) % config.defaultGreenSteps == 0) 
   {
-  float firstOffset = std::max(0.0f,timeFromIntersection)*currentIntersection.externalSpeed; 
+  double firstOffset = std::max(0.0,timeFromIntersection)*currentIntersection.externalSpeed; 
   for(int e=0; e < queSize; e++)
   if( 1.0f - firstOffset/ config.detectionRadius >0 )  {trafficLights[currentIntersection.id].roadsTL[0].score +=  1.0f - firstOffset/ config.detectionRadius; firstOffset+=config.CAR_LENGTH+config.SAFETY_GAP;}
   else break;

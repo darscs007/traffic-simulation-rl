@@ -52,7 +52,7 @@ class trafficLightSystem
 
   void internalRoadScoring(const line& currentRoad, const std::vector<std::deque<int>>& trafficQueues,const std::vector<vehicle>& vehicles,int step);
 
-  void externalRoadScoring(const node& currentIntersection, int queSize,float timeFromIntersection ,int step);
+  void externalRoadScoring(const node& currentIntersection, int queSize, double timeFromIntersection ,int step);
 
   int getCurrentGreenRoad(int currentIntersectionId) const;
 };

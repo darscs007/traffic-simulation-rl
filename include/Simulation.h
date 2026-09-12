@@ -16,14 +16,14 @@ struct stepMovementStats
     const simulationConfig& config;
     int moving=0;
     int stationary=0;
-    float fractionalMoving=0.0f;
-    float fractionalStationary=0.0f;
+    double fractionalMoving=0.0;
+    double fractionalStationary=0.0;
   
     stepMovementStats(const simulationConfig& config)
       : config(config)
     {}
 
-    void addVehicle(float movementFraction, int count)
+    void addVehicle(double movementFraction, int count)
     {
       if(movementFraction <= config.correction) stationary+=count;
       else moving+=count;
@@ -40,13 +40,13 @@ struct stepMovementStats
 
 struct TripStatistics
   {
-  float taExtTime=0.0f;
-  float teExtTime=0.0f;
-  float taIntTime=0.0f;
-  float teIntTime=0.0f; 
-  float sumExtDiv=0.0f; 
-  float sumIntDiv=0.0f; 
-  float sumTotDiv=0.0f;
+  double taExtTime=0.0;
+  double teExtTime=0.0;
+  double taIntTime=0.0;
+  double teIntTime=0.0; 
+  double sumExtDiv=0.0; 
+  double sumIntDiv=0.0; 
+  double sumTotDiv=0.0;
   int noTrips=0;
   };
 
@@ -56,22 +56,22 @@ class Simulation
   simulationConfig config;
   Graph city;
   std::vector<vehicle> vehicles;
-  float ctime; // current time of the simulation
-  float tstep; // time step for the simulation
+  double ctime; // current time of the simulation
+  double tstep; // time step for the simulation
   std::vector<int> originWeights,destinationWeights;
   std::discrete_distribution<int> chooseOrigin,chooseDestination;
   std::mt19937 rng; // generate random number from seed
   std::mt19937 patienceRng; 
   std::vector<std::deque<int>> waitQueues;
   std::vector<std::deque<int>> trafficQueues;
-  std::vector<float> nextAllowedEntry; // vector to store the next allowed entry time for each intersection
+  std::vector<double> nextAllowedEntry; // vector to store the next allowed entry time for each intersection
   std::normal_distribution<float> impatienceTresh;
   std::normal_distribution<float> patienceRegen;
   trafficLightSystem tlmanager;
   TripStatistics tripStats;
   std::ofstream& g;
 
-  void transferToRoad(vehicle &v, float ftime, int targetRoadId, bool trafficQueue, int sourceId);
+  void transferToRoad(vehicle &v, double ftime, int targetRoadId, bool trafficQueue, int sourceId);
 
   int chooseNextBestRoad(vehicle &v, int currentIntersectionId, int currentTargetId);
   
@@ -84,7 +84,7 @@ class Simulation
 
   void readCity();
 
-  void setTime(float ctime, float tstep);
+  void setTime(double ctime, double tstep);
 
   void initializeShortestPaths();
 
