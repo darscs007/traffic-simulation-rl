@@ -174,15 +174,15 @@ typedef std::pair<float,int> dPair;
         std::priority_queue< dPair, std::vector<dPair>, std::greater<dPair> > pq;
       
         d[i]=0;
-        pq.push(std::make_pair(0.0f,i));
+        pq.push(std::make_pair(0.0,i));
 
         while(!pq.empty())
         {
-          float currentDistance = pq.top().first;
+          float currentTime = pq.top().first;
           int last = pq.top().second;
           pq.pop();
 
-          if (currentDistance > d[last])
+          if (currentTime > d[last])
             continue;
 
           for(int j=0; j<adjList[last].size(); j++)

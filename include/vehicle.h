@@ -11,7 +11,7 @@ struct vehicle
     float positionOnRoad; // Position on the road as a float between 0.0 and 1.0
     bool isActive;
     int lastStepProcessed;
-    float initTime, actualSpawnTime, endTime,expectedExternalTime;
+    double initTime, actualSpawnTime, endTime,expectedExternalTime;
     
     //speed is the road's maxspeed
     

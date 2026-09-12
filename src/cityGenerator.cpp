@@ -19,9 +19,9 @@ simulationConfig config;
 
 struct genConfig
 {
- int noIntersections=50;
- int maxNoRoads=80; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
- int halfLength=300; // all intersections are in the square
+ int noIntersections = 50;
+ int maxNoRoads = 80; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
+ int halfLength = 300; // all intersections are in the square
  int seed=56;
  int nodeCandidates = 10;
 

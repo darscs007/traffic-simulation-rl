@@ -8,8 +8,8 @@ struct simulationConfig
 float CAR_LENGTH = 1.0f;
 float SAFETY_GAP= 1.5f;
 int steps= 4000;
-int maxcars= 1000;
-float correction =1e-6f;
+int maxcars=1000;
+double correction =1e-6;
 int defaultGreenSteps =20;
 int minGreenSteps =10;
 int detectionRadius= 28;
@@ -30,7 +30,7 @@ std::vector<std::string> validate() const
    if(SAFETY_GAP < 0.0f) errors.push_back("Negative safety gap");
    if(steps <= 0) errors.push_back("Non-positive step count");
    if(maxcars <= 0) errors.push_back("Non-positive vehicle count");
-   if(correction <= 0.0f || correction >= 1.0f) errors.push_back("Invalid correction value");
+   if(correction <= 0.0 || correction >= 1.0) errors.push_back("Invalid correction value");
    if(defaultGreenSteps <= 0) errors.push_back("Non-positive default green steps");
    if(minGreenSteps <= 0) errors.push_back("Non-positive minimum green steps");
    if(minGreenSteps > defaultGreenSteps) errors.push_back("Minimum green steps exceed default green steps");
