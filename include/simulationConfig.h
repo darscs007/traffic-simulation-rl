@@ -8,7 +8,7 @@ struct simulationConfig
 float CAR_LENGTH = 1.0f;
 float SAFETY_GAP= 1.5f;
 int steps= 4000;
-int maxcars= 1600;
+int maxcars= 1000;
 float correction =1e-6f;
 int defaultGreenSteps =20;
 int minGreenSteps =10;
