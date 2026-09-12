@@ -6,19 +6,21 @@
 
 #include "simulationConfig.h"
 #include "Simulation.h"
+#include <chrono>
 
 std::string outputFileName = std::string(PROJECT_PATH) + "/output/output.out";
-
 std::ofstream g(outputFileName);
 
 int main() 
 {
-
+  const auto start = std::chrono::steady_clock::now();
+  
   simulationConfig config;
    
   if(!validateAndReportConfig(config))
     return EXIT_FAILURE;
     
+  
   Simulation sim(config,g);
   
   try{sim.readCity();}
@@ -54,5 +56,7 @@ int main()
 
   }
   
+  const auto end = std::chrono::steady_clock::now();
+  std::cout << "Runtime: "<< std::chrono::duration<double>(end - start).count()<< " seconds\n";
   return 0;
 }
