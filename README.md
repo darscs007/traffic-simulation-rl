@@ -40,9 +40,10 @@ The trace records movement, waiting, trip-delay, signal-phase, and driver-state 
 ## Current capabilities
 
 - Directed road graph loaded from CSV, with validation of IDs, endpoints, lengths, and speed limits.
-- Free-flow shortest paths based on road travel time (`length / speed`).
+- Free-flow shortest paths based on road travel time (`length / speed`), precomputed for all origins with binary-heap Dijkstra and cached as next-road and travel-time matrices.
 - Origin/destination demand sampling with a fixed seed for reproducible runs.
 - External entry queues and per-road `deque` traffic queues with vehicle length and safety-gap constraints.
+- Dependency-aware internal-road updates: when a leader could benefit from a downstream road being processed first, roads are updated from downstream to upstream within the same time step instead of following numerical road-ID order.
 - Per-intersection signal phases: one external queue or one incoming road is green at a time.
 - Static and adaptive traffic-light modes selected by `simulationConfig::isAdaptive`.
 - Adaptive allocation based on distance-weighted detector demand, observed turn proportions, and estimated downstream availability.
@@ -146,14 +147,9 @@ start_visualizer.bat
 
 The current model intentionally uses one lane per directed road and one green movement per intersection. It does not yet simulate turning lanes, pedestrians, yellow/all-red intervals, or simultaneous non-conflicting movements.
 
-Road processing is currently order-dependent: a vehicle may fail to enter a road that becomes available later in the same time step. This is a known approximation; a synchronized reservation/transfer phase is planned.
-
-The current route precomputation is suitable for small experimental networks, but should use priority-queue Dijkstra before large-scale city generation.
-
 ## Next steps
 
 - Add more generator styles, including hierarchical arterial layouts using L-trees.
-- Code optimisations: Dijkstra with priority queue, generator peformance
-- Replace order-dependent transfers with synchronized updates.
+- Improve generator performance for substantially larger city layouts.
 - Add automated tests for spacing, routing, trace consistency, and metrics.
 - Define an RL observation/action/reward interface and benchmark it against the existing static and adaptive controllers.

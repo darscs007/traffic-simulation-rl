@@ -3,7 +3,10 @@
 #include <sstream>
 #include <iostream>
 #include "trafficConstraints.h"
+#include <queue>
+#include <functional>
 
+typedef std::pair<float,int> dPair;
 
     std::vector<std::string> Graph::validateRoad(int fromi, int toi, int lgi, int maxspeedi, int idi) const
     {
@@ -164,54 +167,45 @@
     shortestPaths=std::vector<std::vector<int>> (nodes.size(), std::vector<int>(nodes.size(), -1));
     std::vector<std::vector<int>> successors(nodes.size(),std::vector<int>(nodes.size(), -1));
 
-   //dijkstra O(n^2) for each node, total O(n^3). I will optimize it later with a priority queue O(n^2 log n)
+  
     for(int i=0;i<nodes.size();i++)
     {
-
-        std::vector<int> f(nodes.size(), 0);
         std::vector<float> d(nodes.size(), traffic::INF);
-
+        std::priority_queue< dPair, std::vector<dPair>, std::greater<dPair> > pq;
       
         d[i]=0;
-        f[i]=1;
+        pq.push(std::make_pair(0.0f,i));
 
-       for(int j=0; j<adjList[i].size(); j++)
-            {
-            const line& cline=lines[adjList[i][j]];
-            d[cline.to]= (float)cline.lg / cline.maxspeed;
-            shortestPaths[i][cline.to] = adjList[i][j];    
-            }
-       
-        
-        int ok=1;
-        while(ok)
+        while(!pq.empty())
         {
-         float mn=traffic::INF; int x;
-         ok=0;
-         for(int j=0; j < nodes.size(); j++)
+          float currentDistance = pq.top().first;
+          int last = pq.top().second;
+          pq.pop();
+
+          if (currentDistance > d[last])
+            continue;
+
+          for(int j=0; j<adjList[last].size(); j++)
+          {
+            const line& cline=lines[adjList[last][j]];
+            int nodeId=cline.to;
+            float time= (float) cline.lg/cline.maxspeed;
+
+            
+            if( d[last]+time < d[nodeId])
             {
-             if(f[j]==0 && d[j]<mn)
-                    {mn=d[j]; x=j;ok=1;}
-               
+            d[nodeId]=d[last]+time;
+            pq.push(std::make_pair(d[nodeId], nodeId));
+            shortestPaths[i][nodeId] = adjList[last][j];  
             }
-         
-         if(ok)
-         {
-          f[x]=1;
-          for(int j=0; j<adjList[x].size(); j++)
-           {
-            const line& cline=lines[adjList[x][j]];
-            if(!f[cline.to] && d[cline.to] > d[x] + (float)cline.lg/cline.maxspeed)
-                {d[cline.to] = d[x] + (float)cline.lg/cline.maxspeed;
-                 shortestPaths[i][cline.to] = adjList[x][j];
-                }
-           }
-         }
-         
+
+          }
+
         }
 
     }
     
+    timeMatrix.clear();
     timeMatrix.resize(shortestPaths.size(),std::vector<float>(shortestPaths[0].size(),0)); // generate timeMatrix
 
     for(int i=0; i<timeMatrix.size(); i++)
