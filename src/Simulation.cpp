@@ -6,6 +6,7 @@
 #include <sstream>
 #include "traceFormats.h"
 #include <cstdint>
+#include <chrono>
 
   enum class LeaderState
 {
@@ -211,11 +212,11 @@
   {
         float leaderAdvance=-1;
         LeaderState leaderState = LeaderState::NoLeader;
-        
-        for(int j=0; j<trafficQueues[i].size(); j++)
+        std::deque<int>& trafficQueue= trafficQueues[i];
+        for(int j=0; j<trafficQueue.size(); j++)
         {
         bool changedPaths=0;    
-        vehicle &v=vehicles[trafficQueues[i][j]];
+        vehicle &v=vehicles[trafficQueue[j]];
 
          if(v.lastStepProcessed==step) continue;
          
@@ -231,16 +232,16 @@
 
           if(leaderState == LeaderState::NoLeader || leaderState == LeaderState::ExitedRoad)  v.positionOnRoad += tstep * currentRoad.maxspeed / currentRoad.lg;
           else  
-        if(tstep * currentRoad.maxspeed / currentRoad.lg < vehicles[trafficQueues[i][j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg-v.positionOnRoad )  
+        if(tstep * currentRoad.maxspeed / currentRoad.lg < vehicles[trafficQueue[j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg-v.positionOnRoad )  
                {
                 v.positionOnRoad += tstep * currentRoad.maxspeed / currentRoad.lg;
                 leaderState = LeaderState::AdvancedOnRoad;
                }
             else 
                {
-                double ftime= tstep - (vehicles[trafficQueues[i][j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
+                double ftime= tstep - (vehicles[trafficQueue[j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg-v.positionOnRoad)*currentRoad.lg/currentRoad.maxspeed;
                 
-                v.positionOnRoad = vehicles[trafficQueues[i][j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg; 
+                v.positionOnRoad = vehicles[trafficQueue[j-1]].positionOnRoad-(config.CAR_LENGTH+config.SAFETY_GAP)/currentRoad.lg; 
                 leaderState= LeaderState::Blocked;
    
                 if(tlmanager.isGreenFor(currentRoad.to,currentRoad.id) && (1-v.positionOnRoad)*currentRoad.lg <= config.vehicleDetectionRadius) 
@@ -263,8 +264,8 @@
                     v.endTime=ctime-(tstep-ftime);
                     didNotExit=0;
                     leaderState = LeaderState::ExitedRoad;
-                    pendingReinitializations.push_back(trafficQueues[i][j]);
-                    trafficQueues[i].pop_front();
+                    pendingReinitializations.push_back(trafficQueue[j]);
+                    trafficQueue.pop_front();
                     j--;
 
                     tlmanager.recordDestination(v.destinationIntersectionId,v.currentRoadId);
@@ -347,6 +348,8 @@
 
   void Simulation::oneStep(int step) 
   {
+    const auto start = std::chrono::steady_clock::now();
+    
     //adding a pair vector and a deque vector that will retain the precedence for parsing
     //std::vector<int> waitingPredecessors(city.getNoIntersections(),-1); more time efficient if there are numerous waiting roads, to be implemented
     std::vector<std::pair<int,int>> pairs;
@@ -357,8 +360,13 @@
     stepMovementStats mstats(config);
     std::vector<int> pendingReinitializations;
 
-    tlmanager.updateTrafficLights(step,city);
+    
 
+    const auto updateTL = std::chrono::steady_clock::now();
+    tlmanager.updateTrafficLights(step,city);
+    prof.trafficLights+= std::chrono::steady_clock::now() - updateTL;
+
+    const auto vehiclesT=std::chrono::steady_clock::now();
     for(int i=0; i<city.getNoRoads(); i++)
       {
         const line &currentRoad=city.getLine(i);
@@ -516,7 +524,9 @@
     for(int i=0; i<pendingReinitializations.size(); i++)
        reinitializeVehicle(pendingReinitializations[i]);
 
-   std::cout << step << '\n';    
+    prof.vehicleUpdate+= std::chrono::steady_clock::now() - vehiclesT;
+    
+    const auto statsT = std::chrono::steady_clock::now();
    std::uint32_t nr=0;
     
     for(int i=0; i<trafficQueues.size(); i++)
@@ -533,39 +543,48 @@
       stats.totW= (tripStats.taExtTime+tripStats.taIntTime)/(tripStats.teExtTime+tripStats.teIntTime);
     }
 
+    congBuffer.clear();
+    vehicleBuffer.clear();
+    phaseBuffer.clear();
+
     lev0.write(reinterpret_cast<const char*>(&stats), sizeof(stats));
 
+    prof.statistics+= std::chrono::steady_clock::now() - statsT;
+
+    auto const congT = std::chrono::steady_clock::now();
     for(int i=0; i<city.getNoRoads(); i++)
     {
       float occupancy= std::max(0.0f,(trafficQueues[i].size()*(config.CAR_LENGTH+config.SAFETY_GAP)-config.SAFETY_GAP))/city.getLine(i).lg;
-      lev1.write(reinterpret_cast<const char*>(&occupancy), sizeof(occupancy));
+      congBuffer.push_back(occupancy);
 
     }
+    lev1.write(reinterpret_cast<const char*>(congBuffer.data()), congBuffer.size() * sizeof(float));
 
+    prof.congestionOutput+= std::chrono::steady_clock::now() - congT;
+
+    const auto detailT = std::chrono::steady_clock::now();
    if(config.detailedRendering)
    {
 
-       
     for(int i=0; i< city.getNoIntersections(); i++)
-       { 
-        const std::int32_t phase=tlmanager.getCurrentGreenRoad(i);
-        lev2.write(reinterpret_cast<const char*>(&phase), sizeof(phase));
-       
-       }
+        phaseBuffer.push_back(tlmanager.getCurrentGreenRoad(i));
    
+      lev2.write(reinterpret_cast<const char*>(phaseBuffer.data()), phaseBuffer.size()*sizeof(std::uint32_t));
       lev2.write(reinterpret_cast<const char*>(&nr), sizeof(nr));
 
    
-    
     for(int i=0; i<trafficQueues.size(); i++)
       for(int j=0; j<trafficQueues[i].size(); j++)
         {
             const vehicle& v=vehicles[trafficQueues[i][j]];
             detailedVehicle det={v.id, v.currentRoadId, std::clamp(v.positionOnRoad, 0.0f, 1.0f), v.isImpatient};
-
-            lev2.write(reinterpret_cast<const char*>(&det), sizeof(det));
+            vehicleBuffer.push_back(det);
         }
+         lev2.write(reinterpret_cast<const char*>(vehicleBuffer.data()), vehicleBuffer.size()* sizeof(detailedVehicle));
     }
+
+    prof.detailedOutput+=std::chrono::steady_clock::now()-detailT;
+    prof.total+=std::chrono::steady_clock::now()-start;
     
     ctime+=tstep;    
     }
@@ -635,4 +654,22 @@
   int Simulation::getNoRoads() const
   {
     return city.getNoRoads();
+  }
+
+  void Simulation::showProfile(std::ofstream &g)
+  {
+    g << "vehicle: " << std::chrono::duration<double>(prof.vehicleUpdate).count() << '\n';
+    g << "lights: " << std::chrono::duration<double>(prof.trafficLights).count() << '\n';
+    g << "stats: " << std::chrono::duration<double>(prof.statistics).count() << '\n';
+    g << "congestion: " << std::chrono::duration<double>(prof.congestionOutput).count() << '\n';
+    g << "detailed: " << std::chrono::duration<double>(prof.detailedOutput).count() << '\n';
+    g << "total: " << std::chrono::duration<double>(prof.total).count() << '\n';
+  }
+
+  void Simulation::initializeBuffers()
+  {
+    vehicleBuffer.reserve(config.maxcars);
+    phaseBuffer.reserve(city.getNoIntersections());
+    congBuffer.reserve(city.getNoRoads());
+
   }

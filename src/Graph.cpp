@@ -12,10 +12,10 @@ typedef std::pair<float,int> dPair;
     {
       std::vector<std::string> errors;
 
-      if(nodeIndexMap.find(fromi) == nodeIndexMap.end()) 
+      if(fromi >= nodes.size() ||  fromi < 0) 
           errors.push_back( "Invalid 'from' intersection id: " + std::to_string(fromi));
                
-      if(nodeIndexMap.find(toi) == nodeIndexMap.end()) 
+      if(toi >=nodes.size() || toi < 0) 
           errors.push_back("Invalid 'to' intersection id: " + std::to_string(toi));
        
       if(fromi == toi) 
@@ -26,12 +26,6 @@ typedef std::pair<float,int> dPair;
 
       if(maxspeedi <= 0) 
         errors.push_back("Invalid road max speed: " + std::to_string(maxspeedi));  
-                   
-      if(idi < 0) 
-        errors.push_back("Invalid road id: " + std::to_string(idi));  
-
-      if(lineIndexMap.find(idi) != lineIndexMap.end()) 
-          errors.push_back("Duplicate road id found: " + std::to_string(idi)); 
 
       if(idi != lines.size())
       errors.push_back("Unconsecutive Road Id: "+ std::to_string(idi));
@@ -43,9 +37,6 @@ typedef std::pair<float,int> dPair;
     {
       std::vector<std::string> errors;
       
-      if (nodeIndexMap.find(idi) != nodeIndexMap.end()) 
-                errors.push_back("Duplicate intersection id found: " + std::to_string(idi));
-
       if(externalSpeedi <= 0)
       errors.push_back("Negative or zero external road speed: "+ std::to_string(externalSpeedi));
        
@@ -70,7 +61,6 @@ typedef std::pair<float,int> dPair;
     void Graph::addNode(float x, float y, int externalSpeed,int id)
        {
         nodes.push_back({x,y,externalSpeed,id});
-        nodeIndexMap[id] = nodes.size()-1; // store the position of the intersection in the vector
         if(adjList.size() <= id)
         {
             adjList.resize(id+1);
@@ -80,7 +70,6 @@ typedef std::pair<float,int> dPair;
     void Graph::addLine(int from, int to, int lg, int maxspeed, int id)
     { 
         lines.push_back({from, to, lg, maxspeed, id});
-        lineIndexMap[id] = lines.size()-1; // store the position of the road in the vector
         adjList[from].push_back(lines.size()-1); // add vector index of the road in the adjacency list to know all the details of the roads that start from an intersection
     }
 
@@ -266,3 +255,5 @@ typedef std::pair<float,int> dPair;
    {
     return shortestPaths[i][j];
    }
+
+

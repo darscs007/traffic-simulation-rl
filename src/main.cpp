@@ -13,18 +13,18 @@ std::string outputFileName = std::string(PROJECT_PATH) + "/output/";
 std::ofstream lev2(outputFileName+"level2/detailed.bin", std::ios::binary);
 std::ofstream lev0(outputFileName+"level0/statistics.bin", std::ios::binary);
 std::ofstream lev1(outputFileName+"level1/congestion.bin", std::ios::binary);
+std::ofstream g(std::string(PROJECT_PATH)+"/profiling/timeProfilingNew.out");
 
 int main() 
 {
+ const auto start = std::chrono::steady_clock::now();
   
   simulationConfig config;
-
-
-   
+ 
   if(!validateAndReportConfig(config))
     return EXIT_FAILURE;
     
-  const auto start = std::chrono::steady_clock::now();
+  
   
   Simulation sim(config,lev0,lev1,lev2);
   
@@ -38,7 +38,6 @@ int main()
   sim.setTime(0.0f,0.1f); // tstep must be lower than the time it takes for a vehicle to travel the length of the shortest road at its maximum speed
   sim.initializeShortestPaths();
   
-  
   try {sim.initializeWeights(std::string(PROJECT_PATH) + "/data/demand.csv");}
   catch(const std::exception& error)
   {
@@ -48,6 +47,7 @@ int main()
 
   sim.configureTrafficLights();
   sim.initializeVehicles();
+  sim.initializeBuffers();
 
   if (!lev2.is_open()) 
   {
@@ -77,12 +77,17 @@ int main()
 
   lev0.write(reinterpret_cast<const char*>(&lev0Header), sizeof(lev0Header));
   lev1.write(reinterpret_cast<const char*>(&lev1Header), sizeof(lev1Header));
+
+  g << "Preconfiguration: " << std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count() << '\n';
+
   for(int i=0; i<config.steps; i++)
   {
         sim.oneStep(i);
   }
   
+  sim.showProfile(g);
+
   const auto end = std::chrono::steady_clock::now();
-  std::cout << "Runtime: "<< std::chrono::duration<double>(end - start).count()<< " seconds\n";
+  g << "Runtime: "<< std::chrono::duration<double>(end - start).count()<< " seconds\n";
   return 0;
 }

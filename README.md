@@ -113,7 +113,16 @@ The map supports `+`/`−` zoom controls and mouse drag panning. Camera position
 
 ## Performance snapshot
 
-With trace output disabled, the current simulation benchmark reached approximately **7 million vehicle updates per second**, or about **14 ms per simulation step** for the measured workload. This is a development measurement rather than a hardware-independent guarantee; enabling statistics, congestion, or detailed trace writes adds I/O and serialization cost. (The tested city had 10k intersections, ~30k total roads, with 100k simulated vehicles, 4000 steps -> 56 seconds without path finding)
+Measurements below are development benchmarks on the machine used for this project, not hardware-independent guarantees.
+
+- **Large workload, trace output disabled:** approximately **7 million vehicle updates per second**, or about **14 ms per simulation step**. The measured run used 10k intersections, about 30k directed roads, 100k simulated vehicles, and 4,000 steps (about 56 seconds without shortest-path initialization).
+- **Visualizer-trace workload, all trace levels enabled:** 4,000 steps with roughly 6,000 vehicles completed in **1.05 s**. This includes statistics, congestion, and detailed vehicle/signal trace generation.
+
+Trace serialization is batched per frame into reusable buffers: one contiguous write for congestion, signal phases, and detailed vehicles. This avoids per-record stream writes and per-frame buffer allocations.
+
+### CPU profiling
+
+CPU profiling was performed from Visual Studio CMake Folder View with a `RelWithDebInfo` configuration, retaining release optimizations while producing PDB symbols for readable function names. The measured CPU hot path is `Simulation::updateIntRoad` (about 41% total CPU and 35% self CPU in the profiled trace); this is vehicle-movement logic rather than trace-buffer allocation overhead.
 
 ## Architecture
 
@@ -189,7 +198,7 @@ The current model intentionally uses one lane per directed road and one green mo
 ## Next steps
 
 - Add more generator styles, including hierarchical arterial layouts using L-trees.
-- Improve generator performance for substantially larger city layouts.
 - Add automated tests for spacing, routing, trace consistency, and metrics.
 - Define an RL observation/action/reward interface and benchmark it against the existing static and adaptive controllers.
 - Improve visualizer by chunking data
+- Strongly connected components validation for user-provided cities

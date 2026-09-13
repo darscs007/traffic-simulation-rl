@@ -38,6 +38,7 @@ std::vector<std::int32_t> tlPhases;
 std::uint32_t active;
 };
 
+//vector of detailedVehicles
 struct detailedVehicle
 {
 std::uint32_t id;

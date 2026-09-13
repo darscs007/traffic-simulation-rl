@@ -4,7 +4,7 @@ out/
 .vscode/
 .diagsession
 
-# Generated binary traces; directory layout is retained via .gitkeep files.
+
 /output/level0/statistics.bin
 /output/level1/congestion.bin
 /output/level2/detailed.bin

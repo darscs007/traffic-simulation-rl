@@ -10,8 +10,6 @@ class Graph
 private:
     std::vector<node> nodes;
     std::vector<line> lines;
-    std::unordered_map<int, int> nodeIndexMap; // Map to store node id to index mapping
-    std::unordered_map<int, int> lineIndexMap; // Map to store line id to index mapping
     std::vector<std::vector<int>> adjList; // Adjacency list to store the graph structure
     std::vector<std::vector<float>> timeMatrix;
     std::vector<std::vector<int>> shortestPaths;

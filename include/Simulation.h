@@ -10,6 +10,9 @@
 #include <string>
 #include <fstream>
 #include "vehicle.h"
+#include <chrono>
+#include <cstdint>
+#include <traceFormats.h>
 
 struct stepMovementStats
   {
@@ -72,6 +75,20 @@ class Simulation
   std::ofstream& lev0;
   std::ofstream& lev1;
   std::ofstream& lev2;
+  std::vector<detailedVehicle> vehicleBuffer;
+  std::vector<std::int32_t> phaseBuffer;
+  std::vector<float> congBuffer;
+
+  struct profile
+  {
+    std::chrono::steady_clock::duration vehicleUpdate{};
+    std::chrono::steady_clock::duration trafficLights{};
+    std::chrono::steady_clock::duration statistics{};
+    std::chrono::steady_clock::duration congestionOutput{};
+    std::chrono::steady_clock::duration detailedOutput{};
+    std::chrono::steady_clock::duration total{}; 
+
+  } prof;
 
   void transferToRoad(vehicle &v, double ftime, int targetRoadId, bool trafficQueue, int sourceId);
 
@@ -106,4 +123,7 @@ class Simulation
 
   int getNoRoads() const;
 
+  void showProfile(std::ofstream &g);
+
+  void initializeBuffers();
 };
