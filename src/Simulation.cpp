@@ -4,6 +4,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include "traceFormats.h"
+#include <cstdint>
 
   enum class LeaderState
 {
@@ -69,8 +71,8 @@
     return v.currentImpatience > v.impatienceThreshold;
   }
   
-  Simulation::Simulation(const simulationConfig& configValue, std::ofstream& gvalue)
-    : config(configValue), rng(config.seed), patienceRng(config.seed), tlmanager(config), g(gvalue)
+  Simulation::Simulation(const simulationConfig& configValue, std::ofstream& lev0, std::ofstream& lev1, std::ofstream& lev2)
+    : config(configValue), rng(config.seed), patienceRng(config.seed), tlmanager(config), lev0(lev0), lev1(lev1), lev2(lev2)
     {}
 
   void Simulation::configureTrafficLights()
@@ -515,35 +517,57 @@
        reinitializeVehicle(pendingReinitializations[i]);
 
    std::cout << step << '\n';    
-    int nr=0;
-    
-    g << tripStats.noTrips << " ";
-    if(tripStats.noTrips) g << tripStats.sumExtDiv/tripStats.noTrips << " " << tripStats.sumIntDiv/tripStats.noTrips << " " << tripStats.sumTotDiv/tripStats.noTrips << " " << tripStats.taExtTime/tripStats.teExtTime << " " << tripStats.taIntTime/tripStats.teIntTime << " " << (tripStats.taExtTime+tripStats.taIntTime)/(tripStats.teExtTime+tripStats.teIntTime) << '\n'; 
-    else g << 0 << '\n';
-
-    if(step)g << mstats.moving << " " << mstats.stationary << " " << mstats.fractionalMoving << " " << mstats.fractionalStationary << '\n';
-    else g << 0 <<" " <<0<<  " " << 0 << " " << 0 << '\n';
-
-    for(int i=0; i< city.getNoIntersections(); i++)
-        g << tlmanager.getCurrentGreenRoad(i) << " ";
-    g << '\n';
+   std::uint32_t nr=0;
     
     for(int i=0; i<trafficQueues.size(); i++)
          nr+=trafficQueues[i].size();
+
+    statsFormat stats{tripStats.noTrips, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, mstats.moving, mstats.stationary, mstats.fractionalMoving, mstats.fractionalStationary, nr};
+    if(tripStats.noTrips) 
+    {
+      stats.extAvg= tripStats.sumExtDiv/tripStats.noTrips; 
+      stats.intAvg= tripStats.sumIntDiv/tripStats.noTrips; 
+      stats.totAvg= tripStats.sumTotDiv/tripStats.noTrips;
+      stats.extW= tripStats.taExtTime/tripStats.teExtTime;
+      stats.intW= tripStats.taIntTime/tripStats.teIntTime;
+      stats.totW= (tripStats.taExtTime+tripStats.taIntTime)/(tripStats.teExtTime+tripStats.teIntTime);
+    }
+
+    lev0.write(reinterpret_cast<const char*>(&stats), sizeof(stats));
+
+    for(int i=0; i<city.getNoRoads(); i++)
+    {
+      float occupancy= std::max(0.0f,(trafficQueues[i].size()*(config.CAR_LENGTH+config.SAFETY_GAP)-config.SAFETY_GAP))/city.getLine(i).lg;
+      lev1.write(reinterpret_cast<const char*>(&occupancy), sizeof(occupancy));
+
+    }
+
+   if(config.detailedRendering)
+   {
+
+       
+    for(int i=0; i< city.getNoIntersections(); i++)
+       { 
+        const std::int32_t phase=tlmanager.getCurrentGreenRoad(i);
+        lev2.write(reinterpret_cast<const char*>(&phase), sizeof(phase));
+       
+       }
+   
+      lev2.write(reinterpret_cast<const char*>(&nr), sizeof(nr));
+
+   
     
-    g << nr << '\n';
-    
-    for(int i=0; i<vehicles.size(); i++)
-    if(vehicles[i].isActive)
+    for(int i=0; i<trafficQueues.size(); i++)
+      for(int j=0; j<trafficQueues[i].size(); j++)
         {
-            const vehicle& v=vehicles[i];
-            const line& r=city.getLine(v.currentRoadId);
-  
-            g << v.id << " " << v.currentIntersectionId << " " << r.to << " " << v.currentRoadId << " " << v.positionOnRoad << " " << v.isImpatient<<'\n';
+            const vehicle& v=vehicles[trafficQueues[i][j]];
+            detailedVehicle det={v.id, v.currentRoadId, std::clamp(v.positionOnRoad, 0.0f, 1.0f), v.isImpatient};
+
+            lev2.write(reinterpret_cast<const char*>(&det), sizeof(det));
         }
+    }
     
     ctime+=tstep;    
-    
     }
   
   void Simulation::initializeWeights(const std::string& fileName)
@@ -606,4 +630,9 @@
 
     }
 
+  }
+
+  int Simulation::getNoRoads() const
+  {
+    return city.getNoRoads();
   }

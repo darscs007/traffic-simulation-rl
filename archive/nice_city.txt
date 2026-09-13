@@ -1,0 +1,26 @@
+ int noIntersections = 300;
+ int maxNoRoads = 500; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
+ int halfLength = 900; // all intersections are in the square
+ int seed=59;
+ int nodeCandidates = 10;
+
+ int minSpeed=5;
+ int maxSpeed=40;
+
+ float mindist = 12 * (config.CAR_LENGTH+config.SAFETY_GAP); // the minimum distance between 2 intersections (minimum road length) 
+ float packness = 3.5f; // the higher the more packed the city is (here the stddev is 1/3 of radius, which means hat 99.73% of values would be in the radius range)
+ int maximumRejection=70;
+ float chanceBidirectional=0.8f;
+
+ float triangleRetention=0.2f;
+ float minReductionFactor = 1.4f; //used to check if a triangle is close to degenerate
+ float baseInterest=0.0f;
+ float baseDeparture=0.0f;
+ float centralFactor=0.8f;
+ float radialityFactor=2.0f;
+ float extConnectFactor=0.1f;
+ float intConnectFactor=0.1f;
+ float randFactor=0.1f;
+
+ bool moreRandom=0;
+ bool generateCircular=1;

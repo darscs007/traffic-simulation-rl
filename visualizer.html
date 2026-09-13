@@ -7,40 +7,68 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Traffic map</title>
   <style>
-    body { margin: 0; padding: 24px; background: #fff; color: #1f2933; font-family: Bahnschrift, "Arial Narrow",Arial, sans-serif; }
-    main { width: min(1140px, 100%); margin: 0 auto; }
+    body { margin: 0; padding: 20px; background: #fff; color: #1f2933; font-family: Bahnschrift, "Arial Narrow",Arial, sans-serif; }
+    main { width: min(1600px, 100%); margin: 0 auto; display: grid; grid-template-columns: 190px minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
     h1 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
     p { margin: 0 0 16px; color: #667085; font-size: 14px; }
-    svg { display: block; width: 100%; height: auto; background: #fff; }
+    .map-container { position: relative; width: 100%; margin: 0 auto; }
+    svg { display: block; width: 100%; height: calc(100vh - 110px); box-sizing: border-box; border: 1px solid #d0d8e1; background: #fff; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+    svg.is-panning { cursor: grabbing; }
+    .zoom-controls { position: absolute; top: 10px; right: 10px; display: grid; gap: 5px; }
+    .zoom-controls button { width: 30px; height: 30px; padding: 0; border-radius: 3px; background: rgba(255, 255, 255, .94); font-size: 20px; line-height: 1; }
     .grid { stroke: #e8edf2; stroke-width: .35; }
     .axis { stroke: #bac5d0; stroke-width: .7; }
     .road { stroke: #485563; stroke-width: 2.2; stroke-linecap: butt; }
     .centerline { stroke: #eab308; stroke-width: .18; stroke-dasharray: 1.1 1.1; stroke-linecap: butt; }
     .direction-arrow { fill: none; stroke: #263542; stroke-width: .28; stroke-linecap: round; stroke-linejoin: round; }
     .node { fill: #fff; stroke: #1f2933; stroke-width: 0.32; }
-    .node-label { fill: #1f2933; font-size: 3px; text-anchor: middle; dominant-baseline: middle; }
+    .node-label { fill: #111; font-size: 2.5px; text-anchor: middle; dominant-baseline: middle; }
+    .congestion-node { fill: #fff; stroke: #1f2933; stroke-width: 0.32; }
+    .congestion-node-label { fill: #1f2933; font-size: 3px; text-anchor: middle; dominant-baseline: middle; }
+    .overview-road { stroke: #485563; stroke-width: 2.2; stroke-linecap: butt; }
+    .overview-node { fill: #485563; stroke: #485563; stroke-width: .32; }
     .tick { fill: #7a8794; font-size: 2.5px; text-anchor: middle; }
-    .controls { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+    .menu-column { display: grid; gap: 12px; align-content: start; }
+    .menu-column p { margin: 0; }
+    .controls { display: grid; gap: 8px; }
+    .controls button { width: 100%; text-align: left; }
+    .view-controls { display: grid; grid-column: 1 / -1; gap: 8px; padding-top: 10px; border-top: 1px solid #d0d8e1; }
+    .control-title { color: #667085; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .timeline-controls { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; min-width: 0; margin: 0 0 10px; }
     button { border: 1px solid #c8d0d8; background: #fff; color: #1f2933; padding: 5px 9px; cursor: pointer; }
     button,input, output { font: inherit; }
     button:disabled { opacity: .45; cursor: default; }
-    input[type="range"] { flex: 1 1 240px; }
+    button[aria-pressed="true"] { background: #263542; border-color: #263542; color: #fff; }
+    input[type="range"] { min-width: 0; }
+    .timeline-controls input[type="range"] { width: 100%; min-width: 120px; }
     .frame { min-width: 120px; font-variant-numeric: tabular-nums; color: #475467; font-size: 14px; }
-    .statistics { display: flex; gap: 8px 12px; flex-wrap: wrap; margin: -4px 0 14px; color: #475467; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .statistics { display: flex; gap: 8px 12px; flex-wrap: wrap; margin: 0 0 10px; color: #475467; font-size: 13px; font-variant-numeric: tabular-nums; }
     .statistics span { white-space: nowrap; }
-    .visual-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 20px; align-items: start; }
+    .map-column { width: 100%; min-width: 0; }
     .side-column { display: grid; gap: 14px; }
     .trip-statistics { min-height: 160px; padding: 12px; border: 1px solid #d0d8e1; background: #f8fafc; color: #475467; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .congestion-legend { display: none; min-height: 0; }
+    .congestion-legend.visible { display: block; }
     .trip-statistics h2 { margin: 0 0 10px; color: #1f2933; font-size: 14px; font-weight: 600; }
     .trip-metric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 0 5px 7px; border-left: 3px solid #c8d0d8; }
     .trip-metric strong { min-width: 58px; text-align: right; }
-    @media (max-width: 760px) { .visual-layout { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 170px minmax(0, 1fr); }
+      .side-column { grid-column: 2; }
+    }
+    @media (max-width: 650px) {
+      main { grid-template-columns: 1fr; }
+      .side-column { grid-column: auto; }
+      .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     .metric { border-left: 3px solid #c8d0d8; padding-left: 6px; }
     .ratio-good { border-color: #16a34a; color: #15803d; }
     .ratio-warning { border-color: #eab308; color: #a16207; }
     .ratio-danger { border-color: #dc2626; color: #b91c1c; }
     .no-data { color: #667085; font-style: italic; }
     .vehicle { fill: #243eaf; stroke: #73b9e2; stroke-width: .05; }
+    .vehicle-simple { fill: #243eaf; stroke: #73b9e2; stroke-width: .05; }
+    .impatient-indicator-simple { fill: #ef4444; }
     .impatient-indicator { fill: #ef2020; stroke: #fff; stroke-width: .1; }
     .impatience-marker { pointer-events: none; }
     .impatience-bubble { fill: #fff7ed; stroke: #ef4444; stroke-width: .12; filter: drop-shadow(0 0 .22px #ef4444); }
@@ -51,30 +79,61 @@
     .road-label {fill: #fff;font-size: 1.2px;text-anchor: middle;dominant-baseline: middle;font-weight: 600;}
     .green-phase { fill: #22c55e; stroke: #dcfce7; stroke-width: .08; paint-order: stroke; font-size: 3px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; filter: url(#green-glow); }
     .external-green { fill: none; stroke: #22c55e; stroke-width: .6; filter: url(#green-glow); }
+    .green-phase-simple { fill: #86efac; font-size: 2.4px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+    .external-green-simple { fill: none; stroke: #86efac; stroke-width: .45; }
     .external-label { fill: #22c55e; font-size: .8px; text-anchor: middle; font-weight: 700; filter: url(#green-glow); }
+    :root { --congestion-low: #21c953; --congestion-light: #84cc16; --congestion-medium: #e7c711; --congestion-high: #e26c1ee7; --congestion-critical: #ca2424; }
+    .congestion-road { stroke-width: 2.2; stroke-linecap: butt; }
+    .congestion-road.congestion-low { stroke: var(--congestion-low); }
+    .congestion-road.congestion-light { stroke: var(--congestion-light); }
+    .congestion-road.congestion-medium { stroke: var(--congestion-medium); }
+    .congestion-road.congestion-high { stroke: var(--congestion-high); }
+    .congestion-road.congestion-critical { stroke: var(--congestion-critical); }
+    .occupancy-legend-low { border-color: var(--congestion-low) !important; }
+    .occupancy-legend-light { border-color: var(--congestion-light) !important; }
+    .occupancy-legend-medium { border-color: var(--congestion-medium) !important; }
+    .occupancy-legend-high { border-color: var(--congestion-high) !important; }
+    .occupancy-legend-critical { border-color: var(--congestion-critical) !important; }
+    .congestion-arrow { fill: none; stroke: #1f2933; stroke-width: .32; stroke-linecap: round; stroke-linejoin: round; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Traffic simulation alpha</h1>
-    <p id="status">Reading data...</p>
-    <div class="controls" aria-label="Simulation controls">
-      <button type="button" id="previous">Step back</button>
-      <button type="button" id="next">Step ahead</button>
-      <button type="button" id="run">Run</button>
-      <button type="button" id="pause" disabled>Pause</button>
-      <button type="button" id="reload-map">Reload map</button>
-      <input id="frame-slider" type="range" min="0" value="0" aria-label="Step of the simulation">
-      <output id="frame" class="frame" aria-live="polite">Step 0 / 0</output>
-    </div>
-    <div class="visual-layout">
-      <div>
-        <div id="statistics" class="statistics" aria-live="polite"></div>
+    <aside class="menu-column">
+      <h1>Traffic simulation beta</h1>
+      <p id="status">Reading data...</p>
+      <div class="controls" aria-label="Simulation controls">
+        <button type="button" id="previous">Step back</button>
+        <button type="button" id="next">Step ahead</button>
+        <button type="button" id="run">Run</button>
+        <button type="button" id="pause" disabled>Pause</button>
+        <button type="button" id="reload-map">Reload map</button>
+        <div class="view-controls" aria-label="Map views">
+          <span class="control-title">Views</span>
+          <button type="button" id="ultra-detailed-mode" aria-pressed="false">Ultra detailed</button>
+          <button type="button" id="detailed-mode" aria-pressed="false">Detailed</button>
+          <button type="button" id="congestion-mode" aria-pressed="false">Congestion</button>
+          <button type="button" id="overview-mode" aria-pressed="true">Overview</button>
+        </div>
+      </div>
+    </aside>
+    <section class="map-column">
+      <div class="timeline-controls">
+        <input id="frame-slider" type="range" min="0" value="0" aria-label="Step of the simulation">
+        <output id="frame" class="frame" aria-live="polite">Step 0 / 0</output>
+      </div>
+      <div id="statistics" class="statistics" aria-live="polite"></div>
+      <div class="map-container">
         <svg id="map" viewBox="-8 -8 80 100" role="img" aria-label="The road network"></svg>
+        <div class="zoom-controls" aria-label="Map zoom controls">
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        </div>
       </div>
-      <div class="side-column">
-        <aside id="trip-statistics" class="trip-statistics" aria-live="polite"></aside>
-      </div>
+    </section>
+    <div class="side-column">
+      <aside id="trip-statistics" class="trip-statistics" aria-live="polite"></aside>
+      <aside id="congestion-legend" class="trip-statistics congestion-legend" aria-label="Road occupancy legend"></aside>
     </div>
   </main>
   <script>
@@ -84,19 +143,39 @@
     const frameLabel = document.getElementById('frame');
     const statistics = document.getElementById('statistics');
     const tripStatisticsPanel = document.getElementById('trip-statistics');
+    const congestionLegendPanel = document.getElementById('congestion-legend');
     const previous = document.getElementById('previous');
     const next = document.getElementById('next');
     const run = document.getElementById('run');
     const pause = document.getElementById('pause');
     const reloadMap = document.getElementById('reload-map');
+    const ultraDetailedMode = document.getElementById('ultra-detailed-mode');
+    const detailedMode = document.getElementById('detailed-mode');
+    const congestionMode = document.getElementById('congestion-mode');
+    const overviewMode = document.getElementById('overview-mode');
+    const zoomIn = document.getElementById('zoom-in');
+    const zoomOut = document.getElementById('zoom-out');
     const ns = 'http://www.w3.org/2000/svg';
     let frames = [];
+    let congestionFrames = [];
+    let statisticsFrames = [];
     let currentFrame = 0;
+    let displayMode = 'overview';
     let running = null;
     let vehiclesLayer;
     let traceNotice = '';
     let nodesById = new Map();
     let roadsById = new Map();
+    let roadBoundsById = new Map();
+    let visibleRoads = new Set();
+    let visibleNodes = new Set();
+    let mapViewBox = null;
+    let initialMapViewBox = null;
+    let networkBounds = null;
+    let panStart = null;
+    let lastDevicePixelRatio = window.devicePixelRatio;
+    const maximumZoomOutScale = 1.5;
+    const minimumViewportSpanMeters = 10;
     let directedRoads = new Set();
     const laneSeparation = 2.2;
     const useRawVehiclePositions = false;
@@ -109,6 +188,140 @@
       Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
       return el;
     };
+
+    function isDetailedMode(mode = displayMode) {
+      return mode === 'detailed' || mode === 'ultra-detailed';
+    }
+
+    function isUltraDetailedMode() {
+      return displayMode === 'ultra-detailed';
+    }
+
+    function applyMapViewBox() {
+      if (!mapViewBox) return;
+      svg.setAttribute('viewBox', `${mapViewBox.x} ${mapViewBox.y} ${mapViewBox.width} ${mapViewBox.height}`);
+    }
+
+    function constrainMapPan() {
+      if (!mapViewBox || !networkBounds) return;
+      const constrainAxis = (position, viewportSpan, networkStart, networkEnd) => {
+        const networkSpan = networkEnd - networkStart;
+        const requiredOverlap = Math.min(networkSpan * .12, viewportSpan * .25);
+        const minimumPosition = networkStart - viewportSpan + requiredOverlap;
+        const maximumPosition = networkEnd - requiredOverlap;
+        return Math.max(minimumPosition, Math.min(maximumPosition, position));
+      };
+      mapViewBox.x = constrainAxis(mapViewBox.x, mapViewBox.width, networkBounds.minX, networkBounds.maxX);
+      mapViewBox.y = constrainAxis(mapViewBox.y, mapViewBox.height, networkBounds.minY, networkBounds.maxY);
+    }
+
+    function expandViewBoxToViewport(viewBox) {
+      const width = svg.clientWidth;
+      const height = svg.clientHeight;
+      if (!width || !height) return viewBox;
+      const targetAspect = width / height;
+      const currentAspect = viewBox.width / viewBox.height;
+      let fittedViewBox;
+      if (currentAspect < targetAspect) {
+        const expandedWidth = viewBox.height * targetAspect;
+        fittedViewBox = { ...viewBox, x: viewBox.x - (expandedWidth - viewBox.width) / 2, width: expandedWidth };
+      } else {
+        const expandedHeight = viewBox.width / targetAspect;
+        fittedViewBox = { ...viewBox, y: viewBox.y - (expandedHeight - viewBox.height) / 2, height: expandedHeight };
+      }
+      return applyFullscreenVerticalOverscan(fittedViewBox);
+    }
+
+    function applyFullscreenVerticalOverscan(viewBox) {
+      const fullscreen = document.fullscreenElement || window.innerHeight >= window.screen.availHeight * .9;
+      if (!fullscreen) return viewBox;
+      const expandedHeight = viewBox.height * 1.12;
+      return { ...viewBox, y: viewBox.y - (expandedHeight - viewBox.height) / 2, height: expandedHeight };
+    }
+
+    function zoomMap(factor) {
+      if (!mapViewBox || !initialMapViewBox) return;
+      const centerX = mapViewBox.x + mapViewBox.width / 2;
+      const centerY = mapViewBox.y + mapViewBox.height / 2;
+      const currentScale = mapViewBox.width / initialMapViewBox.width;
+      const minimumScale = minimumViewportSpanMeters /
+        Math.min(initialMapViewBox.width, initialMapViewBox.height);
+      const nextScale = Math.max(minimumScale, Math.min(maximumZoomOutScale, currentScale * factor));
+      const appliedFactor = nextScale / currentScale;
+      mapViewBox.width *= appliedFactor;
+      mapViewBox.height *= appliedFactor;
+      mapViewBox.x = centerX - mapViewBox.width / 2;
+      mapViewBox.y = centerY - mapViewBox.height / 2;
+      constrainMapPan();
+      applyMapViewBox();
+      redrawViewport();
+    }
+
+    function updateViewportVisibility() {
+      visibleRoads = new Set();
+      visibleNodes = new Set();
+      if (!mapViewBox) return;
+      const pixelsPerWorldUnit = Math.min(
+        svg.clientWidth / mapViewBox.width,
+        svg.clientHeight / mapViewBox.height
+      );
+      const margin = Math.max(10, 28 / Math.max(pixelsPerWorldUnit, .01));
+      const left = mapViewBox.x - margin;
+      const right = mapViewBox.x + mapViewBox.width + margin;
+      const top = mapViewBox.y - margin;
+      const bottom = mapViewBox.y + mapViewBox.height + margin;
+      roadBoundsById.forEach((bounds, roadId) => {
+        const overlapsBounds = bounds.maxX >= left && bounds.minX <= right &&
+          bounds.maxY >= top && bounds.minY <= bottom;
+        if (overlapsBounds && segmentIntersectsRectangle(bounds, left, right, top, bottom)) {
+          visibleRoads.add(roadId);
+        }
+      });
+      nodesById.forEach(node => {
+        const y = -node.y;
+        if (node.x >= left && node.x <= right && y >= top && y <= bottom) visibleNodes.add(node.id);
+      });
+    }
+
+    function segmentIntersectsRectangle(segment, left, right, top, bottom) {
+      const dx = segment.x2 - segment.x1;
+      const dy = segment.y2 - segment.y1;
+      const p = [-dx, dx, -dy, dy];
+      const q = [segment.x1 - left, right - segment.x1, segment.y1 - top, bottom - segment.y1];
+      let start = 0;
+      let end = 1;
+      for (let i = 0; i < 4; i++) {
+        if (p[i] === 0) {
+          if (q[i] < 0) return false;
+          continue;
+        }
+        const t = q[i] / p[i];
+        if (p[i] < 0) start = Math.max(start, t);
+        else end = Math.min(end, t);
+        if (start > end) return false;
+      }
+      return true;
+    }
+
+    function redrawViewport() {
+      if (!mapViewBox || !nodesById.size) return;
+      draw([...nodesById.values()], [...roadsById.values()], mapViewBox);
+    }
+
+    function refreshCameraForLayoutChange() {
+      const currentDevicePixelRatio = window.devicePixelRatio;
+      if (currentDevicePixelRatio !== lastDevicePixelRatio) {
+        lastDevicePixelRatio = currentDevicePixelRatio;
+        return;
+      }
+      if (!mapViewBox || !nodesById.size || panStart || !svg.clientWidth || !svg.clientHeight) return;
+      const centerY = mapViewBox.y + mapViewBox.height / 2;
+      mapViewBox.height = mapViewBox.width * svg.clientHeight / svg.clientWidth;
+      mapViewBox = applyFullscreenVerticalOverscan(mapViewBox);
+      mapViewBox.y = centerY - mapViewBox.height / 2;
+      constrainMapPan();
+      redrawViewport();
+    }
 
     function parseCsv(text) {
       const [header, ...rows] = text.trim().split(/\r?\n/);
@@ -192,11 +405,16 @@
     }
 
     function renderFrame() {
-      if (!vehiclesLayer || !frames.length) return;
+      if (!vehiclesLayer) return;
+      if (displayMode === 'congestion') return renderCongestionFrame();
+      if (displayMode === 'overview') return renderOverviewFrame();
+      congestionLegendPanel.classList.remove('visible');
+      if (!frames.length) return;
       vehiclesLayer.replaceChildren();
       const frame = frames[currentFrame];
       drawTrafficLightPhases(frame.phases);
       frame.vehicles.forEach(vehicle => {
+        if (!visibleRoads.has(vehicle.roadId)) return;
         const road = roadsById.get(vehicle.roadId);
         if (!road) return;
         const from = nodesById.get(road.from);
@@ -207,7 +425,16 @@
         const position = visualRoadPosition(lane, vehicle.position);
         const x = lane.from.x * (1 - position) + lane.to.x * position;
         const y = lane.from.y * (1 - position) + lane.to.y * position;
-        vehiclesLayer.append(make('circle', { class: 'vehicle', cx: x, cy: y, r: 1}));
+        if (!isUltraDetailedMode()) {
+          vehiclesLayer.append(make('circle', { class: 'vehicle-simple', cx: x, cy: y, r: .72 }));
+          if (vehicle.isImpatient) {
+            vehiclesLayer.append(make('circle', {
+              class: 'impatient-indicator-simple', cx: x + .48, cy: y - .48, r: .2
+            }));
+          }
+          return;
+        }
+        vehiclesLayer.append(make('circle', { class: 'vehicle', cx: x, cy: y, r: 1 }));
         if (!useEmojiForImpatience && vehicle.isImpatient) {
           vehiclesLayer.append(make('circle', {
             class: 'impatient-indicator', cx: x + .62, cy: y - .62, r: .23
@@ -232,12 +459,23 @@
       });
       slider.value = currentFrame;
       frameLabel.textContent = `Step ${currentFrame} / ${frames.length - 1} (${frame.vehicles.length} vehicles)`;
+      renderStatistics(statisticsFrames[currentFrame]);
+      previous.disabled = currentFrame === 0;
+      next.disabled = currentFrame === frames.length - 1;
+    }
+
+    function renderStatistics(frame) {
+      if (!frame) {
+        statistics.replaceChildren();
+        tripStatisticsPanel.replaceChildren();
+        return;
+      }
       const stats = frame.statistics;
       const metricItems = [
           `Moving: ${stats.movingVehicles}`,
           `Stationary: ${stats.stationaryVehicles}`,
-          `Fractional moving: ${stats.fractionalMoving}`,
-          `Fractional stationary: ${stats.fractionalStationary}`
+          `Fractional moving: ${stats.fractionalMoving.toFixed(4)}`,
+          `Fractional stationary: ${stats.fractionalStationary.toFixed(4)}`
       ].map(value => {
           const item = document.createElement('span');
           item.textContent = value;
@@ -276,13 +514,66 @@
         });
         tripStatisticsPanel.replaceChildren(...tripItems);
       }
+    }
+
+    function congestionColor(occupancy) {
+      if (occupancy < .2) return 'congestion-low';
+      if (occupancy < .4) return 'congestion-light';
+      if (occupancy < .6) return 'congestion-medium';
+      if (occupancy < .8) return 'congestion-high';
+      return 'congestion-critical';
+    }
+
+    function renderCongestionFrame() {
+      if (!congestionFrames.length) return;
+      vehiclesLayer.replaceChildren();
+      const occupancy = congestionFrames[currentFrame];
+      visibleRoads.forEach(roadId => {
+        const line = svg.querySelector(`[data-congestion-road-id="${roadId}"]`);
+        if (line) line.setAttribute('class', `congestion-road ${congestionColor(occupancy[roadId] ?? 0)}`);
+      });
+      slider.value = currentFrame;
+      const statisticsFrame = statisticsFrames[currentFrame];
+      frameLabel.textContent = `Step ${currentFrame} / ${congestionFrames.length - 1}` +
+        (statisticsFrame ? ` (${statisticsFrame.statistics.activeVehicles} vehicles)` : '');
+      renderStatistics(statisticsFrame);
+      const title = document.createElement('h2');
+      title.textContent = 'Road occupancy';
+      const legend = [
+        ['0–20%', 'low'], ['20–40%', 'light'], ['40–60%', 'medium'],
+        ['60–80%', 'high'], ['80%+', 'critical']
+      ];
+      const items = [title];
+      legend.forEach(([label, level]) => {
+        const item = document.createElement('div');
+        item.className = `trip-metric occupancy-legend-${level}`;
+        item.textContent = label;
+        items.push(item);
+      });
+      congestionLegendPanel.replaceChildren(...items);
+      congestionLegendPanel.classList.add('visible');
       previous.disabled = currentFrame === 0;
-      next.disabled = currentFrame === frames.length - 1;
+      next.disabled = currentFrame === congestionFrames.length - 1;
     }
 
     function setFrame(frame) {
-      currentFrame = Math.max(0, Math.min(frame, frames.length - 1));
+      const count = displayMode === 'congestion' ? congestionFrames.length :
+        displayMode === 'overview' ? statisticsFrames.length : frames.length;
+      if (!count) return;
+      currentFrame = Math.max(0, Math.min(frame, count - 1));
       renderFrame();
+    }
+
+    function renderOverviewFrame() {
+      if (!statisticsFrames.length) return;
+      vehiclesLayer.replaceChildren();
+      congestionLegendPanel.classList.remove('visible');
+      const frame = statisticsFrames[currentFrame];
+      slider.value = currentFrame;
+      frameLabel.textContent = `Step ${currentFrame} / ${statisticsFrames.length - 1} (${frame.statistics.activeVehicles} vehicles)`;
+      renderStatistics(frame);
+      previous.disabled = currentFrame === 0;
+      next.disabled = currentFrame === statisticsFrames.length - 1;
     }
 
     function stop() {
@@ -313,26 +604,34 @@
       return startInset + Math.max(0, Math.min(1, positionOnRoad)) * (1 - startInset - endpointInset);
     }
 
+    function labelCircleRadius(id, minimumRadius) {
+      const digits = String(Math.abs(id)).length;
+      return Math.min(3.3, Math.max(minimumRadius, .9 + digits * .62));
+    }
+
+    function nodeLabelFontSize(id) {
+      const digits = String(Math.abs(id)).length;
+      const usableDiameter = 2 * (labelCircleRadius(id, 2) - .45);
+      return Math.max(1, Math.min(2.3, usableDiameter / (digits * .68)));
+    }
+
     function drawTrafficLightPhases(phases) {
       phases.forEach((roadId, intersectionId) => {
+        if (!visibleNodes.has(intersectionId)) return;
         const intersection = nodesById.get(intersectionId);
         if (!intersection) return;
         const nodePoint = { x: intersection.x, y: -intersection.y };
 
         if (roadId === -2) {
           vehiclesLayer.append(make('circle', {
-            class: 'external-green', cx: nodePoint.x, cy: nodePoint.y, r: 1.35
+            class: isUltraDetailedMode() ? 'external-green' : 'external-green-simple', cx: nodePoint.x, cy: nodePoint.y,
+            r: labelCircleRadius(intersectionId, 2) + .6
           }));
-          const label = make('text', {
-            class: 'external-label', x: nodePoint.x, y: nodePoint.y + 1.15
-          });
-          label.textContent = 'ext';
-          vehiclesLayer.append(label);
           return;
         }
 
         const road = roadsById.get(roadId);
-        if (!road || road.to !== intersectionId) return;
+        if (!road || !visibleRoads.has(roadId) || road.to !== intersectionId) return;
         const from = nodesById.get(road.from);
         if (!from) return;
         const lane = lanePoints(road, { x: from.x, y: -from.y }, nodePoint);
@@ -346,7 +645,7 @@
         const markerY = lane.from.y * (1 - markerPosition) + lane.to.y * markerPosition;
         const roadAngle = Math.atan2(dy, dx) * 180 / Math.PI;
         const marker = make('text', {
-          class: 'green-phase',
+          class: isUltraDetailedMode() ? 'green-phase' : 'green-phase-simple',
           x: markerX,
           y: markerY,
           transform: `rotate(${roadAngle} ${markerX} ${markerY})`
@@ -369,6 +668,20 @@
       svg.append(make('path', { class: 'direction-arrow', d: `M ${leftX} ${leftY} L ${tipX} ${tipY} L ${rightX} ${rightY}` }));
     }
 
+    function addCongestionArrow(from, to) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const length = Math.hypot(dx, dy);
+      if (!length) return;
+      const ux = dx / length, uy = dy / length;
+      const tipX = from.x + dx * .55, tipY = from.y + dy * .55;
+      const baseX = tipX - ux * 1.1, baseY = tipY - uy * 1.1;
+      const wing = .5;
+      const leftX = baseX - uy * wing, leftY = baseY + ux * wing;
+      const rightX = baseX + uy * wing, rightY = baseY - ux * wing;
+      svg.append(make('path', { class: 'congestion-arrow', d: `M ${leftX} ${leftY} L ${tipX} ${tipY} L ${rightX} ${rightY}` }));
+    }
+
     function addDirectionMarkers(from, to) {
       const length = Math.hypot(to.x - from.x, to.y - from.y);
       for (let distance = 10; distance < length - 2; distance += 10) {
@@ -376,22 +689,46 @@
       }
     }
 
-    function draw(nodes, roads) {
+    function draw(nodes, roads, preservedViewBox = null) {
       svg.replaceChildren();
       const maxAbsX = Math.max(...nodes.map(node => Math.abs(node.x)), 1);
       const maxAbsY = Math.max(...nodes.map(node => Math.abs(node.y)), 1);
-      const gridStep = 10;
+      const gridStep = displayMode === 'congestion' ? 50 : displayMode === 'detailed' ? 25 : 10;
       const halfWidth = Math.ceil(maxAbsX / gridStep) * gridStep;
       const halfHeight = Math.ceil(maxAbsY / gridStep) * gridStep;
       const viewPadding = 10;
-      svg.setAttribute(
-        'viewBox',
-        `${-halfWidth - viewPadding} ${-halfHeight - viewPadding} ` +
-        `${2 * (halfWidth + viewPadding)} ${2 * (halfHeight + viewPadding)}`
-      );
+      const defaultViewBox = {
+        x: -halfWidth - viewPadding,
+        y: -halfHeight - viewPadding,
+        width: 2 * (halfWidth + viewPadding),
+        height: 2 * (halfHeight + viewPadding)
+      };
+      mapViewBox = preservedViewBox ? { ...preservedViewBox } : expandViewBoxToViewport(defaultViewBox);
+      if (!preservedViewBox) initialMapViewBox = { ...mapViewBox };
+      applyMapViewBox();
+      const gridLeft = Math.floor(mapViewBox.x / gridStep) * gridStep;
+      const gridRight = Math.ceil((mapViewBox.x + mapViewBox.width) / gridStep) * gridStep;
+      const gridTop = Math.floor(mapViewBox.y / gridStep) * gridStep;
+      const gridBottom = Math.ceil((mapViewBox.y + mapViewBox.height) / gridStep) * gridStep;
       const byId = new Map(nodes.map(node => [node.id, node]));
       nodesById = byId;
+      networkBounds = {
+        minX: Math.min(...nodes.map(node => node.x)), maxX: Math.max(...nodes.map(node => node.x)),
+        minY: Math.min(...nodes.map(node => -node.y)), maxY: Math.max(...nodes.map(node => -node.y))
+      };
       roadsById = new Map(roads.map(road => [road.id, road]));
+      if (!roadBoundsById.size) {
+        roadBoundsById = new Map(roads.map(road => {
+          const from = byId.get(road.from);
+          const to = byId.get(road.to);
+          return [road.id, {
+            x1: from.x, y1: -from.y, x2: to.x, y2: -to.y,
+            minX: Math.min(from.x, to.x), maxX: Math.max(from.x, to.x),
+            minY: Math.min(-from.y, -to.y), maxY: Math.max(-from.y, -to.y)
+          }];
+        }));
+      }
+      updateViewportVisibility();
       const point = node => ({ x: node.x, y: -node.y });
 
       const defs = make('defs');
@@ -403,13 +740,22 @@
       defs.append(arrow);
       svg.append(defs);
 
-      for (let x = -halfWidth; x <= halfWidth; x += gridStep) {
-        svg.append(make('line', { class: x === 0 ? 'axis' : 'grid', x1: x, y1: -halfHeight, x2: x, y2: halfHeight }));
-        const label = make('text', { class: 'tick', x, y: halfHeight + 5 }); label.textContent = x; svg.append(label);
-      }
-      for (let y = -halfHeight; y <= halfHeight; y += gridStep) {
-        svg.append(make('line', { class: y === 0 ? 'axis' : 'grid', x1: -halfWidth, y1: y, x2: halfWidth, y2: y }));
-        const label = make('text', { class: 'tick', x: -4, y: y + .8 }); label.textContent = -y; svg.append(label);
+      if (displayMode === 'overview' || displayMode === 'congestion') {
+        svg.append(make('line', { class: 'axis', x1: 0, y1: gridTop, x2: 0, y2: gridBottom }));
+        svg.append(make('line', { class: 'axis', x1: gridLeft, y1: 0, x2: gridRight, y2: 0 }));
+      } else {
+        for (let x = gridLeft; x <= gridRight; x += gridStep) {
+          svg.append(make('line', { class: x === 0 ? 'axis' : 'grid', x1: x, y1: gridTop, x2: x, y2: gridBottom }));
+          if (isUltraDetailedMode()) {
+            const label = make('text', { class: 'tick', x, y: gridBottom + 5 }); label.textContent = x; svg.append(label);
+          }
+        }
+        for (let y = gridTop; y <= gridBottom; y += gridStep) {
+          svg.append(make('line', { class: y === 0 ? 'axis' : 'grid', x1: gridLeft, y1: y, x2: gridRight, y2: y }));
+          if (isUltraDetailedMode()) {
+            const label = make('text', { class: 'tick', x: gridLeft + 4, y: y + .8 }); label.textContent = -y; svg.append(label);
+          }
+        }
       }
 
       directedRoads = new Set(roads.map(road => `${road.from}-${road.to}`));
@@ -422,23 +768,30 @@
       roadPairs.forEach(pair => {
         const bidirectional = pair.length > 1;
         pair.forEach(road => {
+          if (!visibleRoads.has(road.id)) return;
           const start = point(byId.get(road.from));
           const end = point(byId.get(road.to));
           const lane = lanePoints(road, start, end);
-          svg.append(make('line', { class: 'road', x1: lane.from.x, y1: lane.from.y, x2: lane.to.x, y2: lane.to.y }));
-          addDirectionMarkers(lane.from, lane.to);
-          const labelX = (lane.from.x + lane.to.x) / 2;
-          const labelY = (lane.from.y + lane.to.y) / 2;
-
-          const label = make('text', {
-          class: 'road-label',
-          x: labelX,
-          y: labelY
-          });
-label.textContent = road.id;
-svg.append(label);
+          if (displayMode === 'congestion') {
+            svg.append(make('line', {
+              class: 'congestion-road', 'data-congestion-road-id': road.id,
+              x1: lane.from.x, y1: lane.from.y, x2: lane.to.x, y2: lane.to.y
+            }));
+            addCongestionArrow(lane.from, lane.to);
+          } else if (displayMode === 'overview') {
+            svg.append(make('line', { class: 'overview-road', x1: lane.from.x, y1: lane.from.y, x2: lane.to.x, y2: lane.to.y }));
+          } else {
+            svg.append(make('line', { class: 'road', x1: lane.from.x, y1: lane.from.y, x2: lane.to.x, y2: lane.to.y }));
+            if (isUltraDetailedMode()) addDirectionMarkers(lane.from, lane.to);
+            else addArrow(lane.from, lane.to, .55);
+            const labelX = (lane.from.x + lane.to.x) / 2;
+            const labelY = (lane.from.y + lane.to.y) / 2;
+            const label = make('text', { class: 'road-label', x: labelX, y: labelY });
+            label.textContent = road.id;
+            svg.append(label);
+          }
         });
-        if (bidirectional) {
+        if (bidirectional && isDetailedMode() && pair.some(road => visibleRoads.has(road.id))) {
           const first = pair[0];
           const start = point(byId.get(first.from));
           const end = point(byId.get(first.to));
@@ -447,9 +800,24 @@ svg.append(label);
       });
 
       nodes.forEach(node => {
+        if (!visibleNodes.has(node.id)) return;
         const p = point(node);
-        svg.append(make('circle', { class: 'node', cx: p.x, cy: p.y, r: 2 }));
-        const label = make('text', { class: 'node-label', x: p.x, y: p.y + .15 }); label.textContent = node.id; svg.append(label);
+        const isCongestion = displayMode === 'congestion';
+        const isOverview = displayMode === 'overview';
+        const nodeRadius = isOverview || isCongestion ? 2 : labelCircleRadius(node.id, 2);
+        svg.append(make('circle', {
+          class: isOverview ? 'overview-node' : isCongestion ? 'congestion-node' : 'node',
+          cx: p.x, cy: p.y, r: nodeRadius
+        }));
+        if (!isCongestion && !isOverview) {
+          const labelAttributes = {
+            class: 'node-label', x: p.x, y: p.y + .15,
+            'font-size': nodeLabelFontSize(node.id)
+          };
+          const label = make('text', labelAttributes);
+          label.textContent = node.id;
+          svg.append(label);
+        }
       });
       vehiclesLayer = make('g', { id: 'vehicles' });
       svg.append(vehiclesLayer);
@@ -463,6 +831,7 @@ svg.append(label);
           fetch(`data/intersections.csv?${Date.now()}`).then(response => response.text()),
           fetch(`data/roads.csv?${Date.now()}`).then(response => response.text())
         ]);
+        roadBoundsById.clear();
         draw(parseCsv(intersections), parseCsv(roads));
         status.className = traceNotice ? 'error' : '';
         status.textContent = traceNotice || 'Reload network: OK';
@@ -474,30 +843,212 @@ svg.append(label);
       }
     }
 
+    function parseDetailedTrace(buffer) {
+      const headerSize = 16;
+      const phaseCount = nodesById.size;
+      const vehicleSize = 16;
+      if (buffer.byteLength < headerSize) throw new Error('Detailed trace header is missing');
+      const view = new DataView(buffer);
+      const magic = view.getUint32(0, true);
+      const version = view.getUint32(4, true);
+      const frameCount = view.getUint32(8, true);
+      if (magic !== 0x56454849) throw new Error('Invalid detailed trace magic');
+      if (version !== 2) throw new Error(`Unsupported detailed trace version: ${version}`);
+      const result = [];
+      let offset = headerSize;
+      for (let frame = 0; frame < frameCount; frame++) {
+        if (offset + phaseCount * 4 + 4 > buffer.byteLength) {
+          throw new Error(`Detailed trace ends during step ${frame}`);
+        }
+        const phases = [];
+        for (let intersection = 0; intersection < phaseCount; intersection++, offset += 4) {
+          const roadId = view.getInt32(offset, true);
+          if (roadId !== -2 && !roadsById.has(roadId)) {
+            throw new Error(`Invalid traffic-light phase at step ${frame}, intersection ${intersection}`);
+          }
+          phases.push(roadId);
+        }
+        const activeVehicleCount = view.getUint32(offset, true);
+        offset += 4;
+        if (offset + activeVehicleCount * vehicleSize > buffer.byteLength) {
+          throw new Error(`Detailed trace ends in vehicle data for step ${frame}`);
+        }
+        const vehicles = [];
+        for (let index = 0; index < activeVehicleCount; index++, offset += vehicleSize) {
+          const id = view.getUint32(offset, true);
+          const roadId = view.getUint32(offset + 4, true);
+          const rawPosition = view.getFloat32(offset + 8, true);
+          const impatient = view.getUint32(offset + 12, true);
+          if (!roadsById.has(roadId) || !Number.isFinite(rawPosition) || rawPosition < -.00001 || rawPosition > 1.00001 || impatient > 1) {
+            throw new Error(`Invalid vehicle entry at step ${frame}, index ${index}`);
+          }
+          vehicles.push({ id, roadId, position: Math.max(0, Math.min(1, rawPosition)), isImpatient: impatient === 1 });
+        }
+        result.push({ phases, vehicles });
+      }
+      if (offset !== buffer.byteLength) throw new Error('Additional data in detailed.bin');
+      return result;
+    }
+
     async function loadTrace() {
       try {
-        const text = await fetch(`output/output.out?${Date.now()}`).then(response => response.text());
-        const trace = parseTrace(text);
-        frames = trace.frames;
+        const buffer = await fetch(`output/level2/detailed.bin?${Date.now()}`).then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.arrayBuffer();
+        });
+        frames = parseDetailedTrace(buffer);
+        if (statisticsFrames.length && statisticsFrames.length !== frames.length) {
+          throw new Error(`Detailed has ${frames.length} steps; statistics has ${statisticsFrames.length}`);
+        }
         addImpatienceVisualTail(frames);
-        traceNotice = trace.notice;
-        slider.max = frames.length - 1;
-        setFrame(0);
-        status.className = traceNotice ? 'error' : '';
-        status.textContent = traceNotice || 'Reloading';
+        traceNotice = '';
+        if (isDetailedMode()) {
+          slider.max = frames.length - 1;
+          setFrame(0);
+        }
       } catch (error) {
         status.className = 'error';
-        status.textContent = `Cannot read output/output.out: ${error.message}`;
+        status.textContent = `Cannot read output/level2/detailed.bin: ${error.message}`;
       }
+    }
+
+    function parseCongestionTrace(buffer) {
+      if (buffer.byteLength < 16) throw new Error('Congestion trace header is missing');
+      const view = new DataView(buffer);
+      const magic = view.getUint32(0, true);
+      const version = view.getUint32(4, true);
+      const frameCount = view.getUint32(8, true);
+      const roadCount = view.getUint32(12, true);
+      if (magic !== 0x434F4E47) throw new Error('Invalid congestion trace magic');
+      if (version !== 2) throw new Error(`Unsupported congestion trace version: ${version}`);
+      if (roadCount !== roadsById.size) throw new Error(`Trace has ${roadCount} roads; map has ${roadsById.size}`);
+      const expectedSize = 16 + frameCount * roadCount * 4;
+      if (buffer.byteLength !== expectedSize) throw new Error('Congestion trace size does not match its header');
+      const result = [];
+      let offset = 16;
+      for (let frame = 0; frame < frameCount; frame++) {
+        const occupancy = [];
+        for (let road = 0; road < roadCount; road++, offset += 4) {
+          const value = view.getFloat32(offset, true);
+          if (!Number.isFinite(value)) throw new Error(`Invalid occupancy at step ${frame}, road ${road}`);
+          occupancy.push(Math.max(0, value));
+        }
+        result.push(occupancy);
+      }
+      return result;
+    }
+
+    function parseStatisticsTrace(buffer) {
+      const headerSize = 16;
+      const recordSize = 88;
+      if (buffer.byteLength < headerSize) throw new Error('Statistics trace header is missing');
+      const view = new DataView(buffer);
+      const magic = view.getUint32(0, true);
+      const version = view.getUint32(4, true);
+      const frameCount = view.getUint32(8, true);
+      if (magic !== 0x53544154) throw new Error('Invalid statistics trace magic');
+      if (version !== 2) throw new Error(`Unsupported statistics trace version: ${version}`);
+      if (buffer.byteLength !== headerSize + frameCount * recordSize) {
+        throw new Error('Statistics trace size does not match its header');
+      }
+      const result = [];
+      for (let frame = 0, offset = headerSize; frame < frameCount; frame++, offset += recordSize) {
+        const completedTrips = view.getUint32(offset, true);
+        const averageExternal = view.getFloat64(offset + 8, true);
+        const weightedExternal = view.getFloat64(offset + 16, true);
+        const averageInternal = view.getFloat64(offset + 24, true);
+        const weightedInternal = view.getFloat64(offset + 32, true);
+        const averageTotal = view.getFloat64(offset + 40, true);
+        const weightedTotal = view.getFloat64(offset + 48, true);
+        const movingVehicles = view.getUint32(offset + 56, true);
+        const stationaryVehicles = view.getUint32(offset + 60, true);
+        const fractionalMoving = view.getFloat64(offset + 64, true);
+        const fractionalStationary = view.getFloat64(offset + 72, true);
+        const activeVehicles = view.getUint32(offset + 80, true);
+        const values = [averageExternal, weightedExternal, averageInternal, weightedInternal,
+          averageTotal, weightedTotal, fractionalMoving, fractionalStationary];
+        if (values.some(value => !Number.isFinite(value))) throw new Error(`Invalid statistics at step ${frame}`);
+        result.push({
+          completedTrips,
+          statistics: { movingVehicles, stationaryVehicles, fractionalMoving, fractionalStationary, activeVehicles },
+          tripStatistics: completedTrips ? {
+            averageExternal, weightedExternal, averageInternal,
+            weightedInternal, averageTotal, weightedTotal
+          } : null
+        });
+      }
+      return result;
+    }
+
+    async function loadCongestionTrace() {
+      try {
+        const buffer = await fetch(`output/level1/congestion.bin?${Date.now()}`).then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.arrayBuffer();
+        });
+        congestionFrames = parseCongestionTrace(buffer);
+        if (statisticsFrames.length && statisticsFrames.length !== congestionFrames.length) {
+          throw new Error(`Congestion has ${congestionFrames.length} steps; statistics has ${statisticsFrames.length}`);
+        }
+        if (displayMode === 'congestion') {
+          slider.max = congestionFrames.length - 1;
+          setFrame(0);
+        }
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = `Cannot read output/level1/congestion.bin: ${error.message}`;
+      }
+    }
+
+    async function loadStatisticsTrace() {
+      try {
+        const buffer = await fetch(`output/level0/statistics.bin?${Date.now()}`).then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.arrayBuffer();
+        });
+        statisticsFrames = parseStatisticsTrace(buffer);
+        if (congestionFrames.length && statisticsFrames.length !== congestionFrames.length) {
+          throw new Error(`Statistics has ${statisticsFrames.length} steps; congestion has ${congestionFrames.length}`);
+        }
+        if (displayMode === 'overview') slider.max = statisticsFrames.length - 1;
+        if (displayMode === 'congestion' || displayMode === 'overview') renderFrame();
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = `Cannot read output/level0/statistics.bin: ${error.message}`;
+      }
+    }
+
+    async function setDisplayMode(mode) {
+      if (mode === displayMode) return;
+      if (mode === 'congestion' && !congestionFrames.length) await loadCongestionTrace();
+      if (isDetailedMode(mode) && !frames.length) await loadTrace();
+      const modeFrames = mode === 'congestion' ? congestionFrames :
+        mode === 'overview' ? statisticsFrames : frames;
+      if (!modeFrames.length) {
+        status.className = 'error';
+        status.textContent = `No ${mode} trace is loaded`;
+        return;
+      }
+      displayMode = mode;
+      ultraDetailedMode.setAttribute('aria-pressed', String(mode === 'ultra-detailed'));
+      detailedMode.setAttribute('aria-pressed', String(mode === 'detailed'));
+      congestionMode.setAttribute('aria-pressed', String(mode === 'congestion'));
+      overviewMode.setAttribute('aria-pressed', String(mode === 'overview'));
+      slider.max = modeFrames.length - 1;
+      currentFrame = Math.min(currentFrame, modeFrames.length - 1);
+      draw([...nodesById.values()], [...roadsById.values()], mapViewBox);
     }
 
     previous.addEventListener('click', () => { stop(); setFrame(currentFrame - 1); });
     next.addEventListener('click', () => { stop(); setFrame(currentFrame + 1); });
     slider.addEventListener('input', () => { stop(); setFrame(Number(slider.value)); });
     run.addEventListener('click', () => {
-      if (!frames.length || currentFrame === frames.length - 1) setFrame(0);
+      const activeFrames = displayMode === 'congestion' ? congestionFrames :
+        displayMode === 'overview' ? statisticsFrames : frames;
+      if (!activeFrames.length) return;
+      if (currentFrame === activeFrames.length - 1) setFrame(0);
       running = setInterval(() => {
-        if (currentFrame === frames.length - 1) return stop();
+        if (currentFrame === activeFrames.length - 1) return stop();
         setFrame(currentFrame + 1);
       }, 100);
       run.disabled = true;
@@ -505,9 +1056,45 @@ svg.append(label);
     });
     pause.addEventListener('click', stop);
     reloadMap.addEventListener('click', reloadNetwork);
+    zoomIn.addEventListener('click', () => zoomMap(0.8));
+    zoomOut.addEventListener('click', () => zoomMap(1.25));
+    svg.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || !mapViewBox) return;
+      event.preventDefault();
+      panStart = { x: event.clientX, y: event.clientY, viewBox: { ...mapViewBox } };
+      svg.setPointerCapture(event.pointerId);
+      svg.classList.add('is-panning');
+    });
+    svg.addEventListener('pointermove', event => {
+      if (!panStart) return;
+      const bounds = svg.getBoundingClientRect();
+      mapViewBox.x = panStart.viewBox.x - (event.clientX - panStart.x) * panStart.viewBox.width / bounds.width;
+      mapViewBox.y = panStart.viewBox.y - (event.clientY - panStart.y) * panStart.viewBox.height / bounds.height;
+      constrainMapPan();
+      applyMapViewBox();
+      redrawViewport();
+    });
+    function finishPan(event) {
+      if (!panStart) return;
+      panStart = null;
+      svg.classList.remove('is-panning');
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+    }
+    svg.addEventListener('pointerup', finishPan);
+    svg.addEventListener('pointercancel', finishPan);
+    ultraDetailedMode.addEventListener('click', () => setDisplayMode('ultra-detailed'));
+    detailedMode.addEventListener('click', () => setDisplayMode('detailed'));
+    congestionMode.addEventListener('click', () => setDisplayMode('congestion'));
+    overviewMode.addEventListener('click', () => setDisplayMode('overview'));
+    new ResizeObserver(refreshCameraForLayoutChange).observe(svg);
+    window.addEventListener('resize', () => requestAnimationFrame(refreshCameraForLayoutChange));
+    document.addEventListener('fullscreenchange', () => requestAnimationFrame(refreshCameraForLayoutChange));
+    async function initialize() {
+      await reloadNetwork();
+      await loadStatisticsTrace();
+    }
 
-    reloadNetwork();
-    loadTrace();
+    initialize();
   </script>
 </body>
 </html>

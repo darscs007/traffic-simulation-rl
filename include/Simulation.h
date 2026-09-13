@@ -69,7 +69,9 @@ class Simulation
   std::normal_distribution<float> patienceRegen;
   trafficLightSystem tlmanager;
   TripStatistics tripStats;
-  std::ofstream& g;
+  std::ofstream& lev0;
+  std::ofstream& lev1;
+  std::ofstream& lev2;
 
   void transferToRoad(vehicle &v, double ftime, int targetRoadId, bool trafficQueue, int sourceId);
 
@@ -78,7 +80,7 @@ class Simulation
   bool updateImpatience(vehicle &v, float fraction);
   
  public:
-  explicit Simulation(const simulationConfig& configValue, std::ofstream& gvalue);
+  explicit Simulation(const simulationConfig& configValue, std::ofstream& lev0, std::ofstream& lev1, std::ofstream& lev2);
 
   void configureTrafficLights();
 
@@ -101,5 +103,7 @@ class Simulation
   void initializeWeights(const std::string& fileName);
 
   void showShortestPaths();
+
+  int getNoRoads() const;
 
 };

@@ -8,7 +8,7 @@ struct simulationConfig
 float CAR_LENGTH = 1.0f;
 float SAFETY_GAP= 1.5f;
 int steps= 4000;
-int maxcars=1000;
+int maxcars=6000;
 double correction =1e-6;
 int defaultGreenSteps =20;
 int minGreenSteps =10;
@@ -22,6 +22,10 @@ int PATIENCE_STDDEV = 12;
 float IMPATIENCE_MULTIPLIER =1.1f;
 int vehicleDetectionRadius =20;
 float fullStepImpatienceReduction =0.5f;
+
+int minYellowJam=10;
+bool detailedRendering=1;
+
 
 std::vector<std::string> validate() const
 {
