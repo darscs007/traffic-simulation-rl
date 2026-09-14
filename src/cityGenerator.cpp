@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <numbers>
 
-std::ofstream g(std::string(PROJECT_PATH) + "/data/intersections.csv");  
+std::ofstream g(std::string(PROJECT_PATH) + "/data//intersections.csv");  
 std::ofstream h(std::string(PROJECT_PATH) + "/data/roads.csv");
 std::ofstream p(std::string(PROJECT_PATH)+"/data/demand.csv");
 
@@ -19,9 +19,9 @@ simulationConfig config;
 
 struct genConfig
 {
- int noIntersections = 300;
- int maxNoRoads = 500; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
- int halfLength =900; // all intersections are in the square
+ int noIntersections = 1000;
+ int maxNoRoads = 1700; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
+ int halfLength =3000; // all intersections are in the square
  int seed=59;
  int nodeCandidates = 10;
 

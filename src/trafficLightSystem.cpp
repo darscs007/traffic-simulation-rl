@@ -11,12 +11,16 @@
   
   void trafficLightSystem::configureTrafficLights(const Graph& city)
   {
+    globalReward=0.0;
+
     trafficLights.clear();
     incomingPhaseId.clear();
     outgoingPhaseId.clear();
+    phaseStartStep.clear();
     trafficLights.resize(city.getNoIntersections());
+    phaseStartStep.resize(city.getNoIntersections(),0);
     
-    if(config.isAdaptive)
+    if(config.isAdaptive || config.isRL)
     {
     incomingPhaseId.assign(city.getNoRoads(), -1);
     outgoingPhaseId.assign(city.getNoRoads(), -1);
@@ -28,6 +32,12 @@
         trafficLights[i].roadsTL.push_back({traffic::externalRoadId,config.defaultGreenSteps,0}); // adding the external road
         trafficLights[i].currentState = 0;
         trafficLights[i].nextChangeStep = trafficLights[i].roadsTL[0].greenSteps;
+        
+        if(config.isRL)
+        {
+        trafficLights[i].countLocalVehicles=0;
+        trafficLights[i].localReward=0.0;
+        }
     }
     
     for(int i=0; i<city.getNoIntersections(); i++)
@@ -38,7 +48,7 @@
         {
             const line& currentRoad=city.getLine(adjRoads[j]);
             trafficLights[currentRoad.to].roadsTL.push_back({currentRoad.id,config.defaultGreenSteps});
-            if(config.isAdaptive)
+            if(config.isAdaptive || config.isRL)
             {
             incomingPhaseId[currentRoad.id]=trafficLights[currentRoad.to].roadsTL.size()-1;
             outgoingPhaseId[currentRoad.id]=ind++; //column number, 0 is the external road, so we start from 1
@@ -46,17 +56,19 @@
         }
     }
 
-    if(config.isAdaptive)
+    if(config.isAdaptive || config.isRL)
         for(int i=0; i<trafficLights.size(); i++)
             trafficLights[i].roadChangeMatrix.resize(trafficLights[i].roadsTL.size(), std::vector<int>(city.getAdjRoads(i).size()+1,0));
   }
 
   void trafficLightSystem::updateTrafficLights(int step, const Graph& city)
   {
-
+    if(!config.isRL)
+    {
     for(int i=0; i<trafficLights.size(); i++)
     {
-        if(config.isAdaptive && step &&step % (trafficLights[i].roadsTL.size()*config.defaultGreenSteps) == 0)
+      
+      if(config.isAdaptive && step &&step % (trafficLights[i].roadsTL.size()*config.defaultGreenSteps) == 0)
         {
          float maxscore=0.0f, distance=0.0f;
          while(distance <= config.detectionRadius) 
@@ -142,6 +154,47 @@
       for(int i=0; i<trafficLights.size(); i++)
         for (int e = 0; e < trafficLights[i].roadsTL.size(); e++)
             trafficLights[i].roadsTL[e].score= 0.0f;
+      
+  }
+  else
+  {
+    if(step && step%config.defaultGreenSteps ==0)
+    {
+      for(int i=0; i<trafficLights.size(); i++)
+      {
+        //rewards
+        
+        stateTL state=presentTL(step,i,city);
+        double reward=0.6*trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1) + 0.4*globalReward/config.maxcars;
+        //send
+
+        //receive
+        int chosenPhase=trafficLights[i].currentState; // +++ validation
+        if(chosenPhase!=trafficLights[i].currentState)
+        {
+         phaseStartStep[i]=step;
+         trafficLights[i].roadChangeMatrix[chosenPhase].resize(trafficLights[i].roadChangeMatrix[chosenPhase].size(),0);
+        }
+        trafficLights[i].currentState=chosenPhase;
+       
+
+        trafficLights[i].localReward=0.0;
+        trafficLights[i].countLocalVehicles=0;
+      }
+
+      globalReward=0.0;
+    }
+    
+    
+    
+    //every mingreensteps 
+    //calculate rewards
+    //send info and rewards
+    //receive actions
+    //apply actions
+
+  }
+  
   }
 
   bool trafficLightSystem::isGreenFor(int intersectionId, int thisRoadId)
@@ -154,7 +207,7 @@
 
   void trafficLightSystem::recordRoadChange(const vehicle& v, const line& currentRoad, const line& targetRoad, int step)
   {
-    if(config.isAdaptive)
+    if(!config.isRL && config.isAdaptive)
     {
     trafficLight& tl=trafficLights[currentRoad.to];  
     tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[targetRoad.id]]++; 
@@ -162,32 +215,47 @@
     if(targetRoad.id < currentRoad.id && (step+1) % config.defaultGreenSteps == 0)
     trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += std::max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ config.detectionRadius);    
     } 
+
+    if(config.isRL)
+    {
+    trafficLight& tl=trafficLights[currentRoad.to];  
+    tl.roadChangeMatrix[incomingPhaseId[currentRoad.id]][outgoingPhaseId[targetRoad.id]]++;     
+    }
   }
 
   void trafficLightSystem::recordDestination(int intersectionId, int roadId)
   {
-    if(config.isAdaptive)
+    if(config.isRL || config.isAdaptive)
     {
     trafficLight& tl=trafficLights[intersectionId];
     tl.roadChangeMatrix[incomingPhaseId[roadId]][0]++;
     }
+
   }
 
   void trafficLightSystem::recordExtRoadChange(const vehicle&v, const line& targetRoad, int step)
   {
-    if(config.isAdaptive)
+    if(!config.isRL && config.isAdaptive)
     {
       trafficLight& tl=trafficLights[targetRoad.from];  
       tl.roadChangeMatrix[0][outgoingPhaseId[targetRoad.id]]++;
 
       if((step+1) % config.defaultGreenSteps == 0)
       trafficLights[targetRoad.to].roadsTL[incomingPhaseId[targetRoad.id]].score += std::max(0.0f, 1.0f - (1.0f - v.positionOnRoad) *targetRoad.lg/ config.detectionRadius);
-    }    
+    }  
+    
+    if(config.isRL)
+    {
+      trafficLight& tl=trafficLights[targetRoad.from];  
+      tl.roadChangeMatrix[0][outgoingPhaseId[targetRoad.id]]++;
+
+    }
+    
   }
 
   void trafficLightSystem::internalRoadScoring(const line& currentRoad, const std::vector<std::deque<int>>& trafficQueues,const std::vector<vehicle>& vehicles,int step)
   {
-  if(config.isAdaptive && (step+1) % config.defaultGreenSteps == 0)
+  if(!config.isRL && config.isAdaptive && (step+1) % config.defaultGreenSteps == 0)
   {  
     int ind;  
     for(int e=0; e<trafficLights[currentRoad.to].roadsTL.size(); e++)
@@ -201,12 +269,23 @@
              else trafficLights[currentRoad.to].roadsTL[ind].score += 1.0f - (1.0f - v.positionOnRoad) *currentRoad.lg/ config.detectionRadius;
              
             }
-          } 
+  }
+  
+  if(config.isRL && (step+1) % config.defaultGreenSteps == 0)
+  {
+    int ind;  
+    for(int e=0; e<trafficLights[currentRoad.to].roadsTL.size(); e++)
+      if(trafficLights[currentRoad.to].roadsTL[e].roadId==currentRoad.id) {ind=e;break;}
+    
+      
+    trafficLights[currentRoad.to].roadsTL[ind].count =  trafficQueues[currentRoad.id].size();
+
+  }
   } 
 
-  void trafficLightSystem::externalRoadScoring(const node& currentIntersection, int queSize, double timeFromIntersection ,int step)
+  void trafficLightSystem::externalRoadScoring(const node& currentIntersection, int queSize, double timeFromIntersection ,int step, int count)
   {
-  if(config.isAdaptive && (step+1) % config.defaultGreenSteps == 0) 
+  if(!config.isRL && config.isAdaptive && (step+1) % config.defaultGreenSteps == 0) 
   {
   double firstOffset = std::max(0.0,timeFromIntersection)*currentIntersection.externalSpeed; 
   for(int e=0; e < queSize; e++)
@@ -214,9 +293,63 @@
   else break;
   }
 
+  if(config.isRL && (step+1) % config.defaultGreenSteps == 0)
+  {
+    trafficLights[currentIntersection.id].roadsTL[0].count=count;
+
+  }
+
   }
 
   int trafficLightSystem::getCurrentGreenRoad(int currentIntersectionId) const
   {
     return trafficLights[currentIntersectionId].roadsTL[trafficLights[currentIntersectionId].currentState].roadId;
+  }
+
+  stateTL trafficLightSystem::presentTL(int step,int currentIntersectionId, const Graph& city)
+  {
+   std::vector<roadObservation> adjIntRoads;
+   for(int i=1; i<trafficLights[currentIntersectionId].roadsTL.size(); i++)
+   {
+    const line& currentRoad=city.getLine(trafficLights[currentIntersectionId].roadsTL[i].roadId);
+    adjIntRoads.push_back({trafficLights[currentIntersectionId].roadsTL[i].count, (int)((currentRoad.lg+config.SAFETY_GAP)/(config.CAR_LENGTH+config.SAFETY_GAP))});
+
+
+   }
+
+   std::vector<roadObservation> adjRoads;
+   std::vector<bool> adjRoadPhases;
+   std::vector<int> adjTLTimes;
+   const std::vector<int>& outgoingRoadIds= city.getAdjRoads(currentIntersectionId);
+   for(int i=0; i<outgoingRoadIds.size(); i++)
+   {
+    const line& currentRoad=city.getLine(outgoingRoadIds[i]);
+    adjRoads.push_back({trafficLights[currentRoad.to].roadsTL[incomingPhaseId[currentRoad.id]].count, (int)((currentRoad.lg+config.SAFETY_GAP)/(config.CAR_LENGTH+config.SAFETY_GAP))});
+    adjRoadPhases.push_back(trafficLights[currentRoad.to].currentState == incomingPhaseId[currentRoad.id]);
+    adjTLTimes.push_back(step - phaseStartStep[currentRoad.to]);
+   }
+
+   int currentPhase=trafficLights[currentIntersectionId].currentState;
+   int timeSincePhase= step-phaseStartStep[currentIntersectionId];
+   int externalCount=trafficLights[currentIntersectionId].roadsTL[0].count;
+
+   return {currentPhase,timeSincePhase,externalCount, adjIntRoads, adjRoads, trafficLights[currentIntersectionId].roadChangeMatrix,adjRoadPhases,adjTLTimes};
+
+//return + roadchangematrix
+  }
+
+  void trafficLightSystem::calculateGlobalRewards(double fMoving, double fStationary)
+  {
+   if(config.isRL)
+      globalReward+=fMoving-fStationary;
+  }
+
+  void trafficLightSystem::addToLocalReward(int initialIntersectionId, float fraction, int count)
+  {
+    if(config.isRL)
+    {
+      trafficLights[initialIntersectionId].localReward+= fraction * count;
+      trafficLights[initialIntersectionId].localReward-= (1.0f - fraction) * 0.5f * count;
+      trafficLights[initialIntersectionId].countLocalVehicles+=count;  
+    }
   }

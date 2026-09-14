@@ -7,7 +7,26 @@
 #include <deque>
 #include <Graph.h>
 
-class Graph;
+struct roadObservation
+{
+int detecedVehicles;
+int capacity;
+
+};
+
+struct stateTL
+{
+int currentPhase, timeSincePhase;
+
+int externalQueueSize;
+std::vector<roadObservation> incomingRoads;
+std::vector<roadObservation> outgoingRoads;
+
+std::vector<std::vector<int>> roadChangeMatrix;
+
+std::vector<bool> adjTLPhases;
+std::vector<int> adjTLTimes;
+};
 
 struct RoadAtTL
 {
@@ -15,6 +34,7 @@ struct RoadAtTL
   int greenSteps;
   float score;
   float availability;
+  int count;
 };
 
 struct trafficLight
@@ -24,6 +44,8 @@ struct trafficLight
   int currentState; //position in the roadsTL vector
   int nextChangeStep; //time when the next change will occur
   std::vector<std::vector<int>> roadChangeMatrix;
+  double localReward;
+  int countLocalVehicles;
 };
 
 class trafficLightSystem
@@ -33,6 +55,8 @@ class trafficLightSystem
    std::vector<trafficLight> trafficLights;
    std::vector<int> incomingPhaseId;
    std::vector<int> outgoingPhaseId;
+   std::vector<int> phaseStartStep;
+   double globalReward;
 
   public:
 
@@ -52,7 +76,13 @@ class trafficLightSystem
 
   void internalRoadScoring(const line& currentRoad, const std::vector<std::deque<int>>& trafficQueues,const std::vector<vehicle>& vehicles,int step);
 
-  void externalRoadScoring(const node& currentIntersection, int queSize, double timeFromIntersection ,int step);
+  void externalRoadScoring(const node& currentIntersection, int queSize, double timeFromIntersection ,int step, int count);
 
   int getCurrentGreenRoad(int currentIntersectionId) const;
+
+  stateTL presentTL(int step,int currentIntersectionId, const Graph& city); //roads
+
+  void calculateGlobalRewards(double fMoving, double fStationary);
+
+  void addToLocalReward(int initialIntersectionId, float fraction, int count);
 };

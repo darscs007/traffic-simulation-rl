@@ -217,6 +217,7 @@
         {
         bool changedPaths=0;    
         vehicle &v=vehicles[trafficQueue[j]];
+        int initialIntersectionId=city.getLine(v.currentRoadId).to;
 
          if(v.lastStepProcessed==step) continue;
          
@@ -336,6 +337,8 @@
               ftime=(v.positionOnRoad-initPos) * currentRoad.lg/currentRoad.maxspeed;
             
            mstats.addVehicle(ftime/tstep,1);
+           tlmanager.addToLocalReward(initialIntersectionId,ftime/tstep,1);
+
            if(ftime/tstep + config.correction >= 0.9)v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction
          }   
           
@@ -514,11 +517,13 @@
         v.isImpatient =changedPaths || v.currentImpatience > v.impatienceThreshold;
         
         mstats.addVehicle(timeSpentMoving/tstep,1);
+        tlmanager.addToLocalReward(i,timeSpentMoving/tstep,1);
       }
         //general cases
         mstats.addVehicle(lastMovementTime,NoInitVehicles);
-        
-        tlmanager.externalRoadScoring(city.getIntersection(i),waitQueues[i].size(),nextAllowedEntry[i]-ctime,step);
+        tlmanager.addToLocalReward(i,lastMovementTime,NoInitVehicles);
+
+        tlmanager.externalRoadScoring(city.getIntersection(i),waitQueues[i].size(),nextAllowedEntry[i]-ctime,step,waitQueues[i].size());
       } 
   
     for(int i=0; i<pendingReinitializations.size(); i++)
@@ -531,6 +536,8 @@
     
     for(int i=0; i<trafficQueues.size(); i++)
          nr+=trafficQueues[i].size();
+
+    tlmanager.calculateGlobalRewards(mstats.fractionalMoving, mstats.fractionalStationary);
 
     statsFormat stats{tripStats.noTrips, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, mstats.moving, mstats.stationary, mstats.fractionalMoving, mstats.fractionalStationary, nr};
     if(tripStats.noTrips) 

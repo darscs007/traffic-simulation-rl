@@ -38,6 +38,7 @@ struct stepMovementStats
       fractionalMoving+=movementFraction * count;
       fractionalStationary+= (1.0f - movementFraction) *count;
       }
+    
     }
   };
 
