@@ -127,4 +127,8 @@ class Simulation
   void showProfile(std::ofstream &g);
 
   void initializeBuffers();
+
+  void setRLCallbacks(sendData sender, getActions receiver);
+
+  void reset(int i);
 };

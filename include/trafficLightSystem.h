@@ -6,10 +6,11 @@
 #include <simulationConfig.h>
 #include <deque>
 #include <Graph.h>
+#include <functional>
 
 struct roadObservation
 {
-int detecedVehicles;
+int detectedVehicles;
 int capacity;
 
 };
@@ -27,6 +28,20 @@ std::vector<std::vector<int>> roadChangeMatrix;
 std::vector<bool> adjTLPhases;
 std::vector<int> adjTLTimes;
 };
+
+struct controlDataRL
+{
+  std::vector<stateTL> states;
+  std::vector<double> rewards;
+  int step;
+  bool firstStep;
+  bool done;
+
+};
+
+using sendData =std::function<void(const controlDataRL&)>;
+
+using getActions =std::function<std::vector<int>()>;
 
 struct RoadAtTL
 {
@@ -57,10 +72,14 @@ class trafficLightSystem
    std::vector<int> outgoingPhaseId;
    std::vector<int> phaseStartStep;
    double globalReward;
+   sendData send;
+   getActions receive;
 
   public:
 
   explicit trafficLightSystem(const simulationConfig& config);
+
+  void setRLCallbacks(sendData sender, getActions receiver);
   
   void configureTrafficLights(const Graph& city);
 
@@ -85,4 +104,10 @@ class trafficLightSystem
   void calculateGlobalRewards(double fMoving, double fStationary);
 
   void addToLocalReward(int initialIntersectionId, float fraction, int count);
+
+  bool validateActions(const std::vector<int>& actions);
+
+  void sendLastData(const Graph& city);
+
+  void addToFirstCounts(int intersectionId, int count);
 };

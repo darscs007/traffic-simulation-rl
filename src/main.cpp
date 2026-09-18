@@ -38,13 +38,13 @@ int main()
   sim.setTime(0.0f,0.1f); // tstep must be lower than the time it takes for a vehicle to travel the length of the shortest road at its maximum speed
   sim.initializeShortestPaths();
   
-  try {sim.initializeWeights(std::string(PROJECT_PATH) + "/data/demand.csv");}
+  try {sim.initializeWeights(config.cityDirectory + "demand.csv");}
   catch(const std::exception& error)
   {
    std::cerr << "Weight data reading error: " << error.what() << '\n';
    return EXIT_FAILURE;
   }
-
+  
   sim.configureTrafficLights();
   sim.initializeVehicles();
   sim.initializeBuffers();

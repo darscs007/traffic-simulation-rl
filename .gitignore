@@ -3,8 +3,10 @@ out/
 *.exe
 .vscode/
 .diagsession
-
-
 /output/level0/statistics.bin
 /output/level1/congestion.bin
 /output/level2/detailed.bin
+__pycache__/
+*.pyc
+*.egg-info/
+profiling/*_extracted/

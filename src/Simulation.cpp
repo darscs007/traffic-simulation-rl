@@ -84,8 +84,8 @@
 
   void Simulation::readCity()
   {
-    city.readIntersections(std::string(PROJECT_PATH) + "/data/intersections.csv");
-    city.readRoads(std::string(PROJECT_PATH) + "/data/roads.csv");
+    city.readIntersections( config.cityDirectory+ "intersections.csv");
+    city.readRoads(config.cityDirectory + "roads.csv");
     std::cout << "City data read from CSV files successfully\n";
 
   }
@@ -139,6 +139,11 @@
 
       vehicles[i] = v;
     }
+    
+    if(config.isRL)
+      for(int i=0; i<waitQueues.size(); i++)
+        tlmanager.addToFirstCounts(i, waitQueues[i].size());
+
     std::cout << "Vehicles initalized\n";
   }
 
@@ -539,6 +544,8 @@
 
     tlmanager.calculateGlobalRewards(mstats.fractionalMoving, mstats.fractionalStationary);
 
+   
+  if(config.writeOutput){ 
     statsFormat stats{tripStats.noTrips, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, mstats.moving, mstats.stationary, mstats.fractionalMoving, mstats.fractionalStationary, nr};
     if(tripStats.noTrips) 
     {
@@ -592,7 +599,11 @@
 
     prof.detailedOutput+=std::chrono::steady_clock::now()-detailT;
     prof.total+=std::chrono::steady_clock::now()-start;
-    
+  }
+
+    if(step==config.steps-1)
+       tlmanager.sendLastData(city);
+
     ctime+=tstep;    
     }
   
@@ -642,6 +653,8 @@
 
       if(!okDest)
         throw std::invalid_argument("At least one destination weight must be non zero");
+    
+     std::cout << "Weights initialized\n";
     } 
   
   void Simulation::showShortestPaths()
@@ -680,3 +693,33 @@
     congBuffer.reserve(city.getNoRoads());
 
   }
+
+void Simulation::setRLCallbacks(sendData sender, getActions receiver)
+{
+    tlmanager.setRLCallbacks(std::move(sender), std::move(receiver));
+}
+  
+void Simulation::reset(int i)
+{
+ rng.seed(config.seed+i);
+ patienceRng.seed(config.seed+i);
+
+ chooseOrigin.reset();
+ chooseDestination.reset();
+ impatienceTresh.reset();
+ patienceRegen.reset();
+
+ tripStats={};
+ nextAllowedEntry.clear();
+ trafficQueues.clear();
+ waitQueues.clear();
+ vehicles.clear();
+ setTime(0.0,0.1);
+ prof={};
+ vehicleBuffer.clear();
+ phaseBuffer.clear();
+ congBuffer.clear();
+
+ tlmanager.configureTrafficLights(city);
+ initializeVehicles(); 
+}

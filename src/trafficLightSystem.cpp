@@ -12,7 +12,6 @@
   void trafficLightSystem::configureTrafficLights(const Graph& city)
   {
     globalReward=0.0;
-
     trafficLights.clear();
     incomingPhaseId.clear();
     outgoingPhaseId.clear();
@@ -59,6 +58,8 @@
     if(config.isAdaptive || config.isRL)
         for(int i=0; i<trafficLights.size(); i++)
             trafficLights[i].roadChangeMatrix.resize(trafficLights[i].roadsTL.size(), std::vector<int>(city.getAdjRoads(i).size()+1,0));
+    
+  
   }
 
   void trafficLightSystem::updateTrafficLights(int step, const Graph& city)
@@ -158,40 +159,50 @@
   }
   else
   {
-    if(step && step%config.defaultGreenSteps ==0)
+    if(step%config.defaultGreenSteps ==0)
     {
+      controlDataRL data;
+      data.done= 0;
+      data.firstStep= step == 0;
+      data.step=step;
+
       for(int i=0; i<trafficLights.size(); i++)
       {
-        //rewards
-        
-        stateTL state=presentTL(step,i,city);
-        double reward=0.6*trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1) + 0.4*globalReward/config.maxcars;
-        //send
-
-        //receive
-        int chosenPhase=trafficLights[i].currentState; // +++ validation
-        if(chosenPhase!=trafficLights[i].currentState)
-        {
-         phaseStartStep[i]=step;
-         trafficLights[i].roadChangeMatrix[chosenPhase].resize(trafficLights[i].roadChangeMatrix[chosenPhase].size(),0);
-        }
-        trafficLights[i].currentState=chosenPhase;
-       
+        double reward=0.6*trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1) + 0.4*globalReward/(config.maxcars*config.defaultGreenSteps);
+    
+        data.states.push_back(presentTL(step,i,city));
+        data.rewards.push_back(reward);
 
         trafficLights[i].localReward=0.0;
         trafficLights[i].countLocalVehicles=0;
       }
+       globalReward=0.0;
+      
+      
+       //send data
+       send(data);
+       
+        
+      //receive actions
+      std::vector<int> actions = receive();
 
-      globalReward=0.0;
+      //validate
+      if(validateActions(actions))
+      for(int i=0; i< trafficLights.size(); i++)
+      {   
+      if(actions[i]!=trafficLights[i].currentState)
+      {
+        phaseStartStep[i]=step;
+        auto& row = trafficLights[i].roadChangeMatrix[actions[i]];
+        std::fill(row.begin(), row.end(), 0);
+      }
+      trafficLights[i].currentState=actions[i];
+       
+      trafficLights[i].countLocalVehicles=0;
+      }
+      
     }
     
-    
-    
-    //every mingreensteps 
-    //calculate rewards
-    //send info and rewards
-    //receive actions
-    //apply actions
 
   }
   
@@ -332,10 +343,9 @@
    int currentPhase=trafficLights[currentIntersectionId].currentState;
    int timeSincePhase= step-phaseStartStep[currentIntersectionId];
    int externalCount=trafficLights[currentIntersectionId].roadsTL[0].count;
-
+   
    return {currentPhase,timeSincePhase,externalCount, adjIntRoads, adjRoads, trafficLights[currentIntersectionId].roadChangeMatrix,adjRoadPhases,adjTLTimes};
 
-//return + roadchangematrix
   }
 
   void trafficLightSystem::calculateGlobalRewards(double fMoving, double fStationary)
@@ -352,4 +362,56 @@
       trafficLights[initialIntersectionId].localReward-= (1.0f - fraction) * 0.5f * count;
       trafficLights[initialIntersectionId].countLocalVehicles+=count;  
     }
+  }
+
+  void trafficLightSystem::setRLCallbacks(sendData sender, getActions receiver)
+  {
+    send = std::move(sender);
+    receive = std::move(receiver);
+    
+  }
+
+  bool trafficLightSystem::validateActions(const std::vector<int>& actions)
+  {
+    if(actions.size() != trafficLights.size())
+    throw std::invalid_argument("error while choosing action");
+
+    for(int i=0; i<trafficLights.size();i++)
+      if(actions[i] < 0 || actions[i] >= trafficLights[i].roadsTL.size())
+         throw std::invalid_argument("error while choosing action");
+
+    return 1;
+
+  }
+
+  void trafficLightSystem::sendLastData(const Graph& city)
+  {
+      
+    if(config.isRL){
+     controlDataRL data;
+      data.done= 1;
+      data.firstStep= 0;
+      data.step=config.steps;
+     for(int i=0; i<trafficLights.size(); i++)
+      {
+        double reward=0.6*trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1) + 0.4*globalReward/(config.maxcars*config.defaultGreenSteps);
+    
+        data.states.push_back(presentTL(config.steps,i,city));
+        data.rewards.push_back(reward);
+
+        trafficLights[i].localReward=0.0;
+      }
+       globalReward=0.0;
+      
+      
+       //send data
+       send(data);
+    }
+  }
+
+  void trafficLightSystem::addToFirstCounts(int intersectionId, int count)
+  {
+   
+    trafficLights[intersectionId].roadsTL[0].count=count;
+
   }

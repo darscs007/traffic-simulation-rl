@@ -7,7 +7,7 @@
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "",
+      "cmakeCommandArgs": "-Dpybind11_DIR=\"C:/dev/PROIECT ML RL/.venv/Lib/site-packages/pybind11/share/cmake/pybind11\"",
       "buildCommandArgs": "",
       "ctestCommandArgs": ""
     },
@@ -18,7 +18,7 @@
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "",
+      "cmakeCommandArgs": "-Dpybind11_DIR=\"C:/dev/PROIECT ML RL/.venv/Lib/site-packages/pybind11/share/cmake/pybind11\"",
       "buildCommandArgs": "",
       "ctestCommandArgs": ""
     },
