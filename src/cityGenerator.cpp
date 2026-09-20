@@ -19,21 +19,21 @@ simulationConfig config;
 
 struct genConfig
 {
- int noIntersections = 5;
- int maxNoRoads = 200; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
+ int noIntersections = 13;
+ int maxNoRoads = 80; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
  int halfLength =150; // all intersections are in the square
- int seed=11;
- int nodeCandidates = 4;
+ int seed=67;
+ int nodeCandidates = 20;
 
  int minSpeed=5;
  int maxSpeed=40;
 
- float mindist = 20 * (config.CAR_LENGTH+config.SAFETY_GAP); // the minimum distance between 2 intersections (minimum road length) 
+ float mindist = 14 * (config.CAR_LENGTH+config.SAFETY_GAP); // the minimum distance between 2 intersections (minimum road length) 
  float packness = 3.5f; // the higher the more packed the city is (here the stddev is 1/3 of radius, which means hat 99.73% of values would be in the radius range)
  int maximumRejection=70;
  float chanceBidirectional=0.8f;
 
- float triangleRetention=1.0f;
+ float triangleRetention=0.7f;
  float minReductionFactor = 1.1f; //used to check if a triangle is close to degenerate
  float baseInterest=0.0f;
  float baseDeparture=0.0f;
@@ -43,8 +43,8 @@ struct genConfig
  float intConnectFactor=0.1f;
  float randFactor=0.1f;
 
- bool moreRandom=0;
- bool generateCircular=1;
+ bool moreRandom=1;
+ bool generateCircular=0;
 }configuration1;
 
 class cityGenerator

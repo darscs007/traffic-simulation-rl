@@ -13,22 +13,27 @@ import traffic_rl_native as native
 config = native.get_config()
 
 
-checkpoint = torch.load(Path(__file__).parent / "checkpoints" / "ppo_5tl.pt",weights_only=False)
+checkpoint = torch.load(Path(__file__).parent / "checkpoints" / "ppo_13tl_3000_300v.pt",weights_only=False)
 
 layout = None
 encoder = None
 model = None
 current_obs = None
 current_mask = None
+current_states = None
+current_step = None
 
 
 
 def send(data):
-    global layout, encoder, model, current_obs, current_mask
+    global layout, encoder, model, current_obs, current_mask, current_states, current_step
 
     if data.done:
         print("Final rewards:", data.rewards)
         return
+
+    current_states = data.states
+    current_step = data.step
 
     if encoder is None:
         layout = Layout.from_states(data.states)
@@ -46,6 +51,7 @@ def receive():
         logits, _ = model(current_obs, current_mask)
         probabilities = torch.softmax(logits, dim=-1)
         print(probabilities.tolist())
+      
 
     actions = logits.argmax(dim=-1)
     print("actions:", actions.tolist())

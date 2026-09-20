@@ -1,0 +1,46 @@
+FIVE INTERSECTIONS - 4000 steps - seed 101 - 400 seconds
+
+static:
+Trip statistics (2534 completed)
+External - average vehicle
+639.9%
+External - time-weighted
+392.3%
+Internal - average vehicle
+155.7%
+Internal - time-weighted
+152.8%
+Total - average vehicle
+246.3%
+Total - time-weighted
+256.0%
+
+adaptive:
+Trip statistics (3851 completed)
+External - average vehicle
+474.5%
+External - time-weighted
+252.7%
+Internal - average vehicle
+179.9%
+Internal - time-weighted
+175.2%
+Total - average vehicle
+202.9%
+Total - time-weighted
+201.4%
+
+rl trained:
+Trip statistics (4629 completed) ---- traffic flow improved by ~82% compared to static, by ~20.2% compared to adaptive
+External - average vehicle
+351.8%
+External - time-weighted
+245.2%
+Internal - average vehicle
+193.6%
+Internal - time-weighted
+186.4%
+Total - average vehicle
+207.0%
+Total - time-weighted
+199.1%

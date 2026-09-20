@@ -1,0 +1,41 @@
+reward scale: / green_steps
+episodes: 2000
+batch: 8 episodes
+lr: 2e-4
+gamma: 0.99
+lambda: 0.95
+clip: 0.1
+entropy: 0.005
+maxcars: 200
+seed base: 101
+
+city: 
+struct genConfig
+{
+ int noIntersections = 5;
+ int maxNoRoads = 200; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
+ int halfLength =150; // all intersections are in the square
+ int seed=11;
+ int nodeCandidates = 4;
+
+ int minSpeed=5;
+ int maxSpeed=40;
+
+ float mindist = 20 * (config.CAR_LENGTH+config.SAFETY_GAP); // the minimum distance between 2 intersections (minimum road length) 
+ float packness = 3.5f; // the higher the more packed the city is (here the stddev is 1/3 of radius, which means hat 99.73% of values would be in the radius range)
+ int maximumRejection=70;
+ float chanceBidirectional=0.8f;
+
+ float triangleRetention=1.0f;
+ float minReductionFactor = 1.1f; //used to check if a triangle is close to degenerate
+ float baseInterest=0.0f;
+ float baseDeparture=0.0f;
+ float centralFactor=0.8f;
+ float radialityFactor=2.0f;
+ float extConnectFactor=0.1f;
+ float intConnectFactor=0.1f;
+ float randFactor=0.1f;
+
+ bool moreRandom=0;
+ bool generateCircular=1;
+}configuration1;

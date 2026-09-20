@@ -1,12 +1,10 @@
 ﻿# Traffic Simulation for Adaptive Control and Reinforcement Learning
 
-A C++20 microscopic traffic laboratory built for **machine-learning and reinforcement-learning traffic-light control**. Before an RL agent is allowed to touch the signals, the project builds the part that matters most: a city whose queues, spillback, rerouting, and congestion can be inspected step by step.
+A C++20 microscopic traffic laboratory built for **machine-learning and reinforcement-learning traffic-light control**. It includes a multi-agent RL controller with a shared PPO policy: one neural policy controls every intersection from its own local observation. (In progress)
 
-Vehicles travel through a directed city graph, keep safe spacing, obey signal phases, wait at blocked green movements, and may choose another route when impatience wins. Every step is exported to a browser visualizer, so a policy is never a black box: its decisions can be watched turning into free flow, local jams, or full gridlock.
+Vehicles travel through a directed city graph, keep safe spacing, obey trafficlight phases, wait at blocked green movements, and may choose another route when the drivers become impatient. Every step can be exported to a browser visualizer, so a policy can be thoroughly inspected through several view modes.
 
-## Demo
-
-
+## Demo - city generation and visualization
 
 <p align="center">
   <img src="assets/largecity.png" alt="Traffic simulator demo" width="900">
@@ -38,13 +36,13 @@ Vehicles travel through a directed city graph, keep safe spacing, obey signal ph
 
 ## Why this project
 
-Traffic-light control is a sequential decision problem: a local green phase can reduce an immediate queue while creating downstream congestion. This simulator supports controlled comparisons among:
+Trafficlight control is a sequential decision problem with real world impact: a local green phase can reduce an immediate queue while creating downstream congestion. This simulator supports controlled comparisons among:
 
 - fixed-time traffic lights;
 - demand-aware adaptive traffic lights;
-- a future RL controller acting through the same signal interface.
+- a shared-policy PPO RL controller acting through the same signal interface.
 
-The trace records movement, waiting, trip-delay, signal-phase, and driver-state data. These measurements can become RL observations and rewards, while the non-RL controllers remain reproducible baselines.
+The trace records movement, waiting, trip-delay, signal-phase, and driver-state data. These measurements are used as RL observations and rewards, while the non-RL controllers remain reproducible baselines.
 
 ## Current capabilities
 
@@ -54,16 +52,38 @@ The trace records movement, waiting, trip-delay, signal-phase, and driver-state 
 - External entry queues and per-road `deque` traffic queues with vehicle length and safety-gap constraints.
 - Dependency-aware internal-road updates: when a leader could benefit from a downstream road being processed first, roads are updated from downstream to upstream within the same time step instead of following numerical road-ID order.
 - Per-intersection signal phases: one external queue or one incoming road is green at a time.
-- Static and adaptive traffic-light modes selected by `simulationConfig::isAdaptive`.
+- Static, adaptive and RL traffic-light modes selected by `simulationConfig::isAdaptive` and `simulationConfig::isRL`.
 - Adaptive allocation based on distance-weighted detector demand, observed turn proportions, and estimated downstream availability.
+- RL mode through a native pybind11 module (`traffic_rl_native`): C++ owns simulation state; Python receives observations and returns phase actions.
+- Shared actor-critic PPO policy: one set of weights controls every intersection, with a valid-phase action mask for heterogeneous junctions.
+- RL observation of current phase/age, external queue, incoming and outgoing occupancy/capacity, turn proportions, and one-hop neighbouring signal state.
+- Local/global movement reward, GAE, clipped PPO updates, deterministic checkpoint evaluation, and resumable checkpoints.
 - Individual drivers with sampled impatience thresholds and recovery behavior. An impatient driver may choose an available alternative road; attempted reroutes are remembered for the remainder of the trip.
 - Emergent congestion behaviour: localized queues, spillback across intersections, throughput collapse under overload, and gridlock under extreme demand.
 - Versioned binary traces for aggregate statistics, per-road congestion, and detailed vehicle/signal state.
 - Interactive browser visualizer with Overview, Congestion, Detailed, and Ultra detailed modes.
 
+## Reinforcement learning
+
+RL runs at a control interval of `defaultGreenSteps` simulation ticks. At each boundary, C++ sends one `stateTL` per intersection plus rewards accumulated during the previous interval. Python encodes these observations into tensors, samples one valid phase per intersection during training, then returns those phase indices to C++.
+
+The reward mixes normalized local movement and normalized global movement. A bounded negative shaping term can increase the local penalty when a phase has remained green for multiple control windows while serving clearly poor flow.
+
+```text
+Simulation / trafficLightSystem (C++)
+        ↓ stateTL + reward
+encoder → shared actor-critic → PPO (Python)
+        ↓ chosen phase per intersection
+Simulation / trafficLightSystem (C++)
+```
+
+The Python implementation is in `rl/traffic_rl/`: `encoder.py`, `model.py`, `ppo.py`, `train.py` (training entry point), and `evaluate.py` (deterministic `argmax` evaluation and optional trace export). The extension target is `traffic_rl_native`.
+
+**Current experiment results for the 5- and 50-intersection cities are stored in `rl/runs/`**
+
 ## Procedural city generator
 
-`generator` creates a city instead of requiring one to be drawn by hand. It samples intersection locations with a configurable minimum separation, indexes them in a spatial grid, then uses a minimum spanning tree as a connected backbone. Additional local candidate streets are accepted only when they pass geometric intersection checks.
+`generator` creates a city instead of requiring one to be manually created. It samples intersection locations with a configurable minimum separation, indexes them in a spatial grid, then uses a minimum spanning tree as a connected backbone. Additional local candidate streets are accepted only when they pass geometric intersection checks.
 
 The generator can produce one-way and two-way streets, assign speeds from location and controlled randomness, reduce unnatural triangle density, and derive demand weights that favour departures from the outskirts and destinations near the centre. Its output is directly consumable by the simulator:
 
@@ -132,31 +152,50 @@ CPU profiling was performed from Visual Studio CMake Folder View with a `RelWith
 | `Simulation` | Vehicle movement, queues, trip statistics, and trace output. |
 | `Graph` | City loading, validation, and shortest-path data. |
 | `trafficLightSystem` | Signal phases, adaptive scoring, and downstream availability. |
-| `simulationConfig` | Centralized parameters and validation. **Toggle `isAdaptive` here.** |
+| `simulationConfig` | Centralized parameters and validation. **Toggle `isAdaptive` and `isRL` here.** |
 | `cityGenerator` | Procedural planar-city generation, road geometry, and demand generation. |
+| `traffic_core` | Reusable library shared by the simulator executable and Python binding. |
+| `bindings.cpp` / `traffic_rl_native` | pybind11 bridge between C++ simulation and Python PPO. |
+| `rl/traffic_rl` | State encoder, shared actor-critic, PPO, training, evaluation, and checkpoints. |
 | `visualizer.html` | Interactive browser trace viewer. |
 
-The planned RL layer will select signal phases or durations through a narrow controller interface rather than changing vehicle-movement logic directly.
+RL selects signal phases through this narrow controller interface; it does not modify vehicle movement or queue logic.
 
 ## Build and run
 
-Requirements: CMake 3.20+, a C++20 compiler, and Python 3 for the local visualizer server.
+Requirements: CMake 3.20+, a C++20 compiler, Python 3.11+, and the packages in `pyproject.toml` (`torch`, `numpy`, `pybind11`, `tensorboard`).
+
+For the RL module, create a virtual environment and install the project dependencies:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+```
+
+The Visual Studio CMake Folder configurations `x64-Debug` and `x64-Release` already pass `pybind11_DIR` through `CMakeSettings.json`. Use either of those configurations when building from Visual Studio.
+
+For a command-line configure, obtain the environment-specific path instead of hardcoding it:
+
+```powershell
+$pybind11Dir = & .\.venv\Scripts\python.exe -m pybind11 --cmakedir
+cmake -S . -B out/build/x64-Release -G Ninja -DCMAKE_BUILD_TYPE=Release "-Dpybind11_DIR=$pybind11Dir"
+```
 
 From the repository root:
 
 ```powershell
-cmake -S . -B build
-cmake --build build --config Release
-.\build\Release\simulator.exe
+cmake --build out/build/x64-Release --target simulator
+cmake --build out/build/x64-Release --target generator
+cmake --build out/build/x64-Release --target traffic_rl_native
+.\out\build\x64-Release\simulator.exe
 ```
 
-For a single-config generator such as Ninja, run `./build/simulator.exe` instead. The simulator overwrites the binary traces under `output/level0`, `output/level1`, and `output/level2`.
+The `traffic_rl_native` module is written to `out/build/x64-Release/` and is imported from there by the Python RL scripts. The simulator overwrites the binary traces under `output/level0`, `output/level1`, and `output/level2`.
 
 To create a fresh city and its demand data:
 
 ```powershell
-cmake --build build --target generator --config Release
-.\build\Release\generator.exe
+.\out\build\x64-Release\generator.exe
 ```
 
 Run the generator before the simulator whenever you want to replace the current city. Keep generated CSV files under version control when they represent a reproducible experiment.
@@ -184,9 +223,11 @@ Road and intersection IDs are assumed to be consecutive from zero. A two-way str
 ```text
 include/     Public class declarations and shared types
 src/         C++ implementations, simulation entry point, and city generator
+rl/          Python PPO implementation and model checkpoints
 data/        Generated or hand-authored city graph and demand inputs
-output/      Generated binary traces: statistics, congestion, and detailed state
+output/      Generated binary traces: statistics, congestion, and detailed state (not versioned)
 assets/      README screenshots and demo media
+profiling/   Local Visual Studio CPU profiler captures
 visualizer.html
 start_visualizer.bat
 ```
@@ -195,10 +236,18 @@ start_visualizer.bat
 
 The current model intentionally uses one lane per directed road and one green movement per intersection. It does not yet simulate turning lanes, pedestrians, yellow/all-red intervals, or simultaneous non-conflicting movements.
 
+- Rerouting only uses valid routes that continue toward the destination. A saturated downstream cut may have no meaningful escape route.
+- Adaptive control guarantees a minimum service duration for every phase. RL directly selects a phase at every control boundary, so it can exceed adaptive throughput in stable traffic but currently has no hard per-phase anti-starvation constraint.
+- The current RL policy is a feed-forward shared MLP with one-hop neighbour observations. It has no recurrent memory, multi-hop message passing, or GNN.
+- RL robustness under severe congestion is still under study.
+- Detailed traces can be very large. The visualizer loads them lazily, but temporal and spatial chunking are not implemented yet.
+- The RL agent is trained using all traffic information (It doesn't have a limit regarding vehicleDetectionRadius. The adaptive one does)
+
 ## Next steps
 
+- Add per-phase anti-starvation information/protection while retaining direct RL phase selection.
+- Build a reproducible 10-intersection RL-versus-adaptive case study with flow, stationary-vehicle, trip-statistics, and multi-seed plots.
+- Improve visualizer by temporal/spatial trace chunking.
 - Add more generator styles, including hierarchical arterial layouts using L-trees.
 - Add automated tests for spacing, routing, trace consistency, and metrics.
-- Define an RL observation/action/reward interface and benchmark it against the existing static and adaptive controllers.
-- Improve visualizer by chunking data
-- Strongly connected components validation for user-provided cities
+- Add strongly connected components validation for user-provided cities.

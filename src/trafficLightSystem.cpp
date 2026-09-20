@@ -168,7 +168,13 @@
 
       for(int i=0; i<trafficLights.size(); i++)
       {
-        double reward=0.6*trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1) + 0.4*globalReward/(config.maxcars*config.defaultGreenSteps);
+        double meanLocal = trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1);
+        if(step-phaseStartStep[i] >= config.penalizationTreshold * config.defaultGreenSteps && meanLocal <= -0.5)
+          if(step-phaseStartStep[i] <= (1+config.penalizationTreshold) * config.defaultGreenSteps) meanLocal *= config.initPenalization;
+          else if(step-phaseStartStep[i] <= (3+config.penalizationTreshold) * config.defaultGreenSteps) meanLocal *= (config.initPenalization + 0.15);
+          else meanLocal *= (config.initPenalization + 0.3);
+        
+        double reward=0.65*meanLocal + 0.35*globalReward/(config.maxcars*config.defaultGreenSteps);
     
         data.states.push_back(presentTL(step,i,city));
         data.rewards.push_back(reward);
@@ -178,11 +184,9 @@
       }
        globalReward=0.0;
       
-      
        //send data
        send(data);
        
-        
       //receive actions
       std::vector<int> actions = receive();
 
@@ -359,7 +363,7 @@
     if(config.isRL)
     {
       trafficLights[initialIntersectionId].localReward+= fraction * count;
-      trafficLights[initialIntersectionId].localReward-= (1.0f - fraction) * 0.5f * count;
+      trafficLights[initialIntersectionId].localReward-= (1.0f - fraction) * count;
       trafficLights[initialIntersectionId].countLocalVehicles+=count;  
     }
   }
@@ -394,7 +398,13 @@
       data.step=config.steps;
      for(int i=0; i<trafficLights.size(); i++)
       {
-        double reward=0.6*trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1) + 0.4*globalReward/(config.maxcars*config.defaultGreenSteps);
+        double meanLocal = trafficLights[i].localReward/std::max(trafficLights[i].countLocalVehicles,1);
+        if(config.steps-phaseStartStep[i] >= config.penalizationTreshold * config.defaultGreenSteps && meanLocal <= -0.5)
+          if(config.steps-phaseStartStep[i] <= (1+config.penalizationTreshold) * config.defaultGreenSteps) meanLocal *= config.initPenalization;
+          else if(config.steps-phaseStartStep[i] <= (3+config.penalizationTreshold) * config.defaultGreenSteps) meanLocal *= (config.initPenalization + 0.15);
+          else meanLocal *= (config.initPenalization + 0.3);
+        
+        double reward=0.65*meanLocal + 0.35*globalReward/(config.maxcars*config.defaultGreenSteps);
     
         data.states.push_back(presentTL(config.steps,i,city));
         data.rewards.push_back(reward);

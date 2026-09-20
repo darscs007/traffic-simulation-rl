@@ -19,15 +19,11 @@ Simulation sim(config, noTrace0, noTrace1, noTrace2);
 
 void startOutput()
 {
-    const std::filesystem::path output =
-        std::filesystem::path(PROJECT_PATH) / "output";
+    const std::filesystem::path output =std::filesystem::path(PROJECT_PATH) / "output";
 
-    noTrace0.open(output / "level0" / "statistics.bin",
-                  std::ios::binary | std::ios::trunc);
-    noTrace1.open(output / "level1" / "congestion.bin",
-                  std::ios::binary | std::ios::trunc);
-    noTrace2.open(output / "level2" / "detailed.bin",
-                  std::ios::binary | std::ios::trunc);
+    noTrace0.open(output / "level0" / "statistics.bin",std::ios::binary | std::ios::trunc);
+    noTrace1.open(output / "level1" / "congestion.bin",std::ios::binary | std::ios::trunc);
+    noTrace2.open(output / "level2" / "detailed.bin",std::ios::binary | std::ios::trunc);
 
     if (!noTrace0 || !noTrace1 || !noTrace2)
         throw std::runtime_error("Could not open trace files");

@@ -1,0 +1,48 @@
+50 INTERSECTIONS - 4000 steps - seed 101 - 400 seconds
+
+static:
+Trip statistics (4915 completed)
+External - average vehicle
+1854.4%
+External - time-weighted
+713.0%
+Internal - average vehicle
+258.2%
+Internal - time-weighted
+262.7%
+Total - average vehicle
+272.3%
+Total - time-weighted
+272.5%
+
+adaptive:
+Trip statistics (5859 completed)
+External - average vehicle
+1398.3%
+External - time-weighted
+604.8%
+Internal - average vehicle
+222.4%
+Internal - time-weighted
+225.4%
+Total - average vehicle
+233.6%
+Total - time-weighted
+232.5%
+
+rl:
+Trip statistics (6984 completed), 42% better than static, ~19% better than adaptive
+External - average vehicle
+1921.7%
+External - time-weighted
+914.2%
+Internal - average vehicle
+187.1%
+Internal - time-weighted
+182.5%
+Total - average vehicle
+212.7%
+Total - time-weighted
+198.1%
+
+!!!! on seed=107, rl blocked the traffic -> 5322 trips completed VS 5850 trips completed (adaptive)

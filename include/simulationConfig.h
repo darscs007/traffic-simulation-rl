@@ -8,13 +8,13 @@ struct simulationConfig
 float CAR_LENGTH = 1.0f;
 float SAFETY_GAP= 1.5f;
 int steps= 4000;
-int maxcars=200;
+int maxcars=300;
 double correction =1e-6;
 int defaultGreenSteps =20;
 int minGreenSteps =10;
 int detectionRadius= 28;
 bool isAdaptive=0;
-int seed =101;
+int seed =101; // 101 initial
 float IMPATIENCE_PROPAGATION =0.4f; // may be a feature in the future
 int MEAN_IMPATIENCE_THRESHOLD =50;
 float MEAN_PATIENCE_REGENERATION =0.5f;
@@ -23,13 +23,14 @@ float IMPATIENCE_MULTIPLIER =1.1f;
 int vehicleDetectionRadius =20;
 float fullStepImpatienceReduction =0.5f;
 
-int minYellowJam=10;
 bool detailedRendering=1;
 bool isRL=1;
-bool writeOutput=1;
+bool writeOutput=0;
+
+int penalizationTreshold = 3;
+double initPenalization = 1.1;
 
 std::string cityDirectory = std::string(PROJECT_PATH) + "/data/citiesForTraining/fiveIntersections/";
-
 
 std::vector<std::string> validate() const
 {

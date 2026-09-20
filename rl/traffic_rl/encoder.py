@@ -48,12 +48,12 @@ class stateEncoder:
 
         features.append(math.log1p(age_in_windows)/math.log1p(self.episode_steps / self.green_steps))
 
-        features.append(state.external_queue_size/self.max_cars)
+        features.append(state.external_queue_size/max(self.max_cars / len(states), 1))
 
         self.append_roads(features, state.incoming_roads, self.layout.max_in)
         self.append_roads(features, state.outgoing_roads, self.layout.max_out)
 
-        self.append_matrix(features, state.road_change_matrix)
+        self.append_matrix(features, state.road_change_matrix, states)
 
         self.append_neighbours(features, state)
 
@@ -73,7 +73,7 @@ class stateEncoder:
 
       features.extend([0.0,0.0] * (max_roads - len(roads)))
 
-   def append_matrix(self, features, matrix):
+   def append_matrix(self, features, matrix, states):
       max_cols = self.layout.max_out +1
 
       for row_index in range(self.max_phases):
@@ -84,12 +84,12 @@ class stateEncoder:
             value = row[col_index] if col_index < len(row) else 0
             features.append (value/ row_sum if row_sum else 0.0)
 
-         features.append(math.log1p(row_sum)/math.log1p(self.max_cars * self.episode_steps))       
+         features.append(math.log1p(row_sum)/math.log1p(max(self.max_cars / len(states), 1) * self.episode_steps))       
 
    def append_neighbours(self, features, state):
       for index in range(self.layout.max_out):
          if index < len(state.adj_tl_phases):
             features.append(float(state.adj_tl_phases[index]))
-            features.append(math.log1p(state.adj_tl_times[index])/ math.log1p(self.episode_steps))
+            features.append(math.log1p(state.adj_tl_times[index]/self.green_steps)/ math.log1p(self.episode_steps/self.green_steps))
          else:
             features.extend([0.0, 0.0])

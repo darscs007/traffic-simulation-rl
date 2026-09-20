@@ -92,7 +92,7 @@ def ppo_update(
     value_coef=0.5,
     entropy_coef=0.005,
     epochs=4,
-    minibatch_size=512):
+    minibatch_size=1024):
     device = next(model.parameters()).device
 
     obs = rollout["obs"].flatten(0, 1).to(device)
