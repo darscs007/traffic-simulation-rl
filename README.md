@@ -163,50 +163,115 @@ RL selects signal phases through this narrow controller interface; it does not m
 
 ## Build and run
 
-Requirements: CMake 3.20+, a C++20 compiler, Python 3.11+, and the packages in `pyproject.toml` (`torch`, `numpy`, `pybind11`, `tensorboard`).
+### Requirements
 
-For the RL module, create a virtual environment and install the project dependencies:
+- CMake 3.20+
+- A C++20 compiler
+- Python 3.11+
+- Visual Studio with the **Desktop development with C++** workload, including CMake and Ninja (recommended on Windows)
+
+Python dependencies are declared in `pyproject.toml`, including `torch`, `numpy`, `pybind11`, and `tensorboard`.
+
+### Python environment
+
+Open **PowerShell** or **Developer PowerShell for Visual Studio**, then move to the repository root:
+
+```powershell
+cd "C:\path\to\traffic-simulation-rl"
+```
+
+Replace the path with the folder containing `CMakeLists.txt`.
+
+Create a project-local environment and install the project with all Python dependencies:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 ```
 
-The Visual Studio CMake Folder configurations `x64-Debug` and `x64-Release` already pass `pybind11_DIR` through `CMakeSettings.json`. Use either of those configurations when building from Visual Studio.
+### Recommended: build with Visual Studio
 
-For a command-line configure, obtain the environment-specific path instead of hardcoding it:
+1. Open the repository folder in Visual Studio.
+2. Select either the `x64-Debug` or `x64-Release` CMake configuration.
+3. Build the desired target, or build the whole project.
+
+The Visual Studio CMake Folder configurations already resolve `pybind11_DIR` through `CMakeSettings.json`.
+
+### Run from Visual Studio
+
+After building, select the desired executable from the *Startup Item* dropdown in the Visual Studio toolbar:
+
+- Select simulator.exe, then press *Ctrl+F5* to run the simulation without the debugger.
+- Select generator.exe, then press *Ctrl+F5* to generate a new city and demand dataset.
+
+Use *F5* instead of *Ctrl+F5* when you want to run with the debugger attached.
+
+The simulator and generator use the repository data and output folders, so keep the project opened from its repository root.
+
+### Alternative: build and run from the command line
+
+Use **Developer PowerShell for Visual Studio** from the repository root:
 
 ```powershell
 $pybind11Dir = & .\.venv\Scripts\python.exe -m pybind11 --cmakedir
+
 cmake -S . -B out/build/x64-Release -G Ninja -DCMAKE_BUILD_TYPE=Release "-Dpybind11_DIR=$pybind11Dir"
-```
-
-From the repository root:
-
-```powershell
 cmake --build out/build/x64-Release --target simulator
 cmake --build out/build/x64-Release --target generator
 cmake --build out/build/x64-Release --target traffic_rl_native
+```
+
+Run the simulator:
+
+```powershell
 .\out\build\x64-Release\simulator.exe
 ```
 
-The `traffic_rl_native` module is written to `out/build/x64-Release/` and is imported from there by the Python RL scripts. The simulator overwrites the binary traces under `output/level0`, `output/level1`, and `output/level2`.
+The `traffic_rl_native` module is written to `out/build/x64-Release/` and is imported from there by the Python RL scripts. The simulator overwrites binary traces under `output/level0`, `output/level1`, and `output/level2`.
 
-To create a fresh city and its demand data:
+#### Generate a fresh city
+
+Run the generator whenever you want to replace the current city and demand data:
 
 ```powershell
 .\out\build\x64-Release\generator.exe
 ```
 
-Run the generator before the simulator whenever you want to replace the current city. Keep generated CSV files under version control when they represent a reproducible experiment.
+Keep generated CSV files under version control when they represent a reproducible experiment.
 
-Then start the visualizer:
+### Visualizer
+
+Start the local visualizer server:
 
 ```powershell
 .\start_visualizer.bat
 ```
 
-Open `http://localhost:8000/visualizer.html` if it does not open automatically. Refresh the page after generating a new trace.
+Open [http://localhost:8000/visualizer.html](http://localhost:8000/visualizer.html) if it does not open automatically. Refresh the page after generating a new trace.
+
+### RL training
+
+RL training requires the `traffic_rl_native` target to be built in the `x64-Release` configuration. In Visual Studio, build the whole project. Then, after making sure `isRL=1`, `isAdaptive=0`, `writeOutput=0` in `simulationConfig.h`, build all in VS,
+
+```powershell
+.\.venv\Scripts\python.exe .\rl\traffic_rl\train.py
+```
+
+The training script runs PPO episodes through the native simulator binding and prints reward, return, actor-loss, critic-loss, and entropy metrics during training.
+
+Checkpoints are stored under:
+
+```text
+rl/traffic_rl/checkpoints/
+```
+
+The current training script resumes from its configured checkpoint automatically when that file exists. Rename, move, or set the checkpoint path to `None` in `rl/traffic_rl/train.py` to start a fresh training run.
+
+In order to load training, change `writeOutput` to `1`, build all, run `.\.venv\Scripts\python.exe .\rl\traffic_rl\train.py` in the terminal.
+
+### Troubleshooting
+
+If Visual Studio reports that `pybind11` cannot be found, verify that the Python-environment commands completed successfully, then select **Project → Delete Cache and Reconfigure**.
 
 ## Input data
 

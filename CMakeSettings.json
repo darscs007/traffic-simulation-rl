@@ -7,7 +7,7 @@
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "-Dpybind11_DIR=\"C:/dev/PROIECT ML RL/.venv/Lib/site-packages/pybind11/share/cmake/pybind11\"",
+      "cmakeCommandArgs": "-Dpybind11_DIR=\"${projectDir}\\.venv\\Lib\\site-packages\\pybind11\\share\\cmake\\pybind11\"",
       "buildCommandArgs": "",
       "ctestCommandArgs": ""
     },
@@ -18,20 +18,27 @@
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "-Dpybind11_DIR=\"C:/dev/PROIECT ML RL/.venv/Lib/site-packages/pybind11/share/cmake/pybind11\"",
+      "cmakeCommandArgs": "-Dpybind11_DIR=\"${projectDir}\\.venv\\Lib\\site-packages\\pybind11\\share\\cmake\\pybind11\"",
       "buildCommandArgs": "",
-      "ctestCommandArgs": ""
+      "ctestCommandArgs": "",
+      "variables": [
+        {
+          "name": "pybind11_DIR",
+          "value": "${projectDir}\\.venv\\Lib\\site-packages\\pybind11\\share\\cmake\\pybind11",
+          "type": "PATH"
+        }
+      ]
     },
     {
-  "name": "x64-RelWithDebInfo",
-  "generator": "Ninja",
-  "configurationType": "RelWithDebInfo",
-  "inheritEnvironments": [ "msvc_x64_x64" ],
-  "buildRoot": "${projectDir}\\out\\build\\${name}",
-  "installRoot": "${projectDir}\\out\\install\\${name}",
-  "cmakeCommandArgs": "",
-  "buildCommandArgs": "",
-  "ctestCommandArgs": ""
+      "name": "x64-RelWithDebInfo",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": ""
     }
   ]
 }
