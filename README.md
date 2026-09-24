@@ -1,8 +1,8 @@
-﻿# Traffic Simulation for Adaptive Control and Reinforcement Learning
+﻿# Traffic Simulator for Adaptive Control and Reinforcement Learning
 
-A C++20 microscopic traffic laboratory built for **machine-learning and reinforcement-learning traffic-light control**. It includes a multi-agent RL controller with a shared PPO policy: one neural policy controls every intersection from its own local observation. (In progress)
+A C++ microscopic traffic simulator built for **machine-learning and reinforcement-learning traffic-light control**. It includes a multi-agent RL controller with a shared PPO policy: one policy controls every intersection from its own local observation. (In progress)
 
-Vehicles travel through a directed city graph, keep safe spacing, obey trafficlight phases, wait at blocked green movements, and may choose another route when the drivers become impatient. Every step can be exported to a browser visualizer, so a policy can be thoroughly inspected through several view modes.
+Vehicles travel through a directed city graph, keep safe spacing, obey traffic light phases, wait at blocked roads, and the drivers may become impatient and choose and alternative path. The movements, statistics, and data can be exported to a browser visualizer, so a traffic light mode can be thoroughly inspected through several view modes.
 
 ## Demo - city generation and visualization
 
@@ -36,18 +36,18 @@ Vehicles travel through a directed city graph, keep safe spacing, obey trafficli
 
 ## Why this project
 
-Trafficlight control is a sequential decision problem with real world impact: a local green phase can reduce an immediate queue while creating downstream congestion. This simulator supports controlled comparisons among:
+Trafficlight control is a sequential decision problem with real world impact: a local green phase may reduce an immediate queue, but with negative consequences downstream. This simulator supports controlled comparisons among:
 
 - fixed-time traffic lights;
 - demand-aware adaptive traffic lights;
 - a shared-policy PPO RL controller acting through the same signal interface.
 
-The trace records movement, waiting, trip-delay, signal-phase, and driver-state data. These measurements are used as RL observations and rewards, while the non-RL controllers remain reproducible baselines.
+The trace records movement, waiting, trip-delay, signal-phase, and driver-impatience data. These measurements may be used as RL observations and rewards.
 
 ## Current capabilities
 
 - Directed road graph loaded from CSV, with validation of IDs, endpoints, lengths, and speed limits.
-- Free-flow shortest paths based on road travel time (`length / speed`), precomputed for all origins with binary-heap Dijkstra and cached as next-road and travel-time matrices.
+- Free-flow shortest paths based on road travel time (`length / speed`), precomputed for all origins with efficient Dijkstra and cached as next-road and travel-time matrices.
 - Origin/destination demand sampling with a fixed seed for reproducible runs.
 - External entry queues and per-road `deque` traffic queues with vehicle length and safety-gap constraints.
 - Dependency-aware internal-road updates: when a leader could benefit from a downstream road being processed first, roads are updated from downstream to upstream within the same time step instead of following numerical road-ID order.
@@ -59,16 +59,14 @@ The trace records movement, waiting, trip-delay, signal-phase, and driver-state 
 - RL observation of current phase/age, external queue, incoming and outgoing occupancy/capacity, turn proportions, and one-hop neighbouring signal state.
 - Local/global movement reward, GAE, clipped PPO updates, deterministic checkpoint evaluation, and resumable checkpoints.
 - Individual drivers with sampled impatience thresholds and recovery behavior. An impatient driver may choose an available alternative road; attempted reroutes are remembered for the remainder of the trip.
-- Emergent congestion behaviour: localized queues, spillback across intersections, throughput collapse under overload, and gridlock under extreme demand.
 - Versioned binary traces for aggregate statistics, per-road congestion, and detailed vehicle/signal state.
 - Interactive browser visualizer with Overview, Congestion, Detailed, and Ultra detailed modes.
 
 ## Reinforcement learning
 
-RL runs at a control interval of `defaultGreenSteps` simulation ticks. At each boundary, C++ sends one `stateTL` per intersection plus rewards accumulated during the previous interval. Python encodes these observations into tensors, samples one valid phase per intersection during training, then returns those phase indices to C++.
+RL runs at a control interval of `defaultGreenSteps` simulation ticks. At each boundary, C++ sends one `stateTL` per intersection plus rewards accumulated during the previous interval. Python encodes these observations into tensors, samples one valid phase per intersection during training, then returns those phases to the simulator.
 
-The reward mixes normalized local movement and normalized global movement. A bounded negative shaping term can increase the local penalty when a phase has remained green for multiple control windows while serving clearly poor flow.
-
+The reward mixes normalized local movement and normalized global movement. Progressive negative rewards are implemented in case a traffic light doesn't change its phase in a long time. b
 ```text
 Simulation / trafficLightSystem (C++)
         ↓ stateTL + reward
@@ -113,32 +111,28 @@ Each generated trace starts with a 16-byte header: four little-endian `uint32` v
 | File | Magic | Per-frame content | Purpose |
 | --- | --- | --- | --- |
 | `output/level0/statistics.bin` | `STAT` | Completed-trip aggregates, moving/stationary counts, fractional counts, and active vehicles. | Loaded first; powers Overview and the statistics panels. |
-| `output/level1/congestion.bin` | `CONG` | One `float` occupancy value per directed road. | Colorizes the network in Congestion mode. Empty roads are clamped to zero occupancy. |
+| `output/level1/congestion.bin` | `CONG` | One `float [0,1]` occupancy value per directed road . | Colorizes the network in Congestion mode. Empty roads are clamped to zero occupancy. |
 | `output/level2/detailed.bin` | `VEHI` | One `int32` signal phase per intersection, active vehicle count, then `{ id, roadId, positionOnRoad, impatient }` for every active vehicle. | Used by Detailed and Ultra detailed. |
-
-`statistics.bin` currently mirrors the native C++ `statsFormat` record, so producer and viewer are intended to be built/run together on the current Windows target. The other two traces use fixed-width frame fields. The viewer validates magic values, version, expected byte length, road IDs, phase IDs, positions, and impatience flags before rendering.
 
 ### Viewer modes
 
 | Mode | Intended use | Rendering |
 | --- | --- | --- |
-| Overview | Fast aggregate inspection. | Static network, coordinate axes, active-vehicle count, and trip/movement statistics; no vehicle or signal rendering. |
+| Overview | Fast aggregate inspection. | city network, coordinate axes, active-vehicle count, and trip/movement statistics; no vehicle or signal rendering. |
 | Congestion | Network-level queue pressure. | Five occupancy colors, one direction arrow per road, white nodes, axes, and the occupancy legend; no vehicle IDs, traffic lights, or vehicle sprites. |
 | Detailed | Lighter frame-by-frame inspection. | Road/intersection labels, one arrow per road, simplified grid, soft light-green phase markers, simple vehicles, and a red impatience dot. |
 | Ultra detailed | Full debugging view. | Existing rich vehicle IDs, impatience animation, repeated direction markers, complete grid labels, and glow signal rendering. |
 
 The page initially loads the CSV network and `statistics.bin`. `congestion.bin` and `detailed.bin` are fetched only when their mode is selected. Once loaded, the detailed trace is retained so switching between Detailed and Ultra detailed does not re-read the file.
 
-The map supports `+`/`−` zoom controls and mouse drag panning. Camera position and zoom persist across modes. Rendering uses viewport culling in every mode: a fast road bounding-box test is followed by exact segment–viewport intersection, and only visible roads, nodes, signals, and vehicles are placed in the SVG. Zoom-out is capped at 150% of the initial camera span; zoom-in is capped at a 1 m minimum viewport span. Fullscreen adds a small vertical camera overscan to retain top/bottom context.
+The map supports `+`/`−` zoom controls and mouse drag panning. Rendering uses viewport culling in every mode.
 
 ## Performance snapshot
 
-Measurements below are development benchmarks on the machine used for this project, not hardware-independent guarantees.
+Measurements below are development benchmarks on the machine used for this project.
 
 - **Large workload, trace output disabled:** approximately **7 million vehicle updates per second**, or about **14 ms per simulation step**. The measured run used 10k intersections, about 30k directed roads, 100k simulated vehicles, and 4,000 steps (about 56 seconds without shortest-path initialization).
 - **Visualizer-trace workload, all trace levels enabled:** 4,000 steps with roughly 6,000 vehicles completed in **1.05 s**. This includes statistics, congestion, and detailed vehicle/signal trace generation.
-
-Trace serialization is batched per frame into reusable buffers: one contiguous write for congestion, signal phases, and detailed vehicles. This avoids per-record stream writes and per-frame buffer allocations.
 
 ### CPU profiling
 
@@ -299,14 +293,14 @@ start_visualizer.bat
 
 ## Model scope and limitations
 
-The current model intentionally uses one lane per directed road and one green movement per intersection. It does not yet simulate turning lanes, pedestrians, yellow/all-red intervals, or simultaneous non-conflicting movements.
+The current model intentionally uses one lane per directed road and one green movement per intersection. It does not yet simulate turning lanes, pedestrians, yellow/all-red intervals.
 
 - Rerouting only uses valid routes that continue toward the destination. A saturated downstream cut may have no meaningful escape route.
 - Adaptive control guarantees a minimum service duration for every phase. RL directly selects a phase at every control boundary, so it can exceed adaptive throughput in stable traffic but currently has no hard per-phase anti-starvation constraint.
 - The current RL policy is a feed-forward shared MLP with one-hop neighbour observations. It has no recurrent memory, multi-hop message passing, or GNN.
 - RL robustness under severe congestion is still under study.
-- Detailed traces can be very large. The visualizer loads them lazily, but temporal and spatial chunking are not implemented yet.
-- The RL agent is trained using all traffic information (It doesn't have a limit regarding vehicleDetectionRadius. The adaptive one does)
+- Detailed traces can be very large. The visualizer loads them lazily, but temporal and spatial chunking are to be implemented.
+- The RL agent is trained using all traffic information (**It doesn't have a limit regarding vehicleDetectionRadius. The adaptive one does**)
 
 ## Next steps
 
