@@ -1,8 +1,8 @@
-Preconfiguration: 0.0137259
-vehicle: 0.610473
-lights: 0.0068708
-stats: 0.0065774
-congestion: 0.0700779
-detailed: 0.378152
-total: 1.07372
-Runtime: 1.09213 seconds
+Preconfiguration: 0.0121423
+vehicle: 0.494552
+lights: 0.0016726
+stats: 0.0069694
+congestion: 0.0329179
+detailed: 0.463893
+total: 1.01079
+Runtime: 1.03239 seconds

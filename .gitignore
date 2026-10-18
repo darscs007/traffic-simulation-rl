@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 *.egg-info/
 profiling/*_extracted/
+index.html

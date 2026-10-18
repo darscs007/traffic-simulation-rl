@@ -27,6 +27,7 @@ std::vector<std::vector<int>> roadChangeMatrix;
 
 std::vector<bool> adjTLPhases;
 std::vector<int> adjTLTimes;
+std::vector<int> timeSinceGreen;
 };
 
 struct controlDataRL
@@ -50,6 +51,7 @@ struct RoadAtTL
   float score;
   float availability;
   int count;
+  int lastStepGreen;
 };
 
 struct trafficLight
@@ -103,7 +105,7 @@ class trafficLightSystem
 
   void calculateGlobalRewards(double fMoving, double fStationary);
 
-  void addToLocalReward(int initialIntersectionId, float fraction, int count);
+  void addToLocalReward(int initialIntersectionId, int initialRoadId ,float fraction, int count, int step);
 
   bool validateActions(const std::vector<int>& actions);
 

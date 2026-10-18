@@ -112,7 +112,8 @@ PYBIND11_MODULE(traffic_rl_native, m) {
     .def_readonly("outgoing_roads", &stateTL::outgoingRoads)
     .def_readonly("road_change_matrix", &stateTL::roadChangeMatrix)
     .def_readonly("adj_tl_phases", &stateTL::adjTLPhases)
-    .def_readonly("adj_tl_times", &stateTL::adjTLTimes); 
+    .def_readonly("adj_tl_times", &stateTL::adjTLTimes)
+    .def_readonly("time_since_green", &stateTL::timeSinceGreen);
     
     py::class_<controlDataRL>(m, "ControlDataRL")
     .def_readonly("states", &controlDataRL::states)

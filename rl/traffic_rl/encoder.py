@@ -43,7 +43,8 @@ class stateEncoder:
         phase = [0.0] * self.max_phases
         phase[state.current_phase] = 1.0
         features.extend(phase)
-
+        
+        self.append_phase_ages(features,state.time_since_green,)
         age_in_windows = state.time_since_phase / self.green_steps
 
         features.append(math.log1p(age_in_windows)/math.log1p(self.episode_steps / self.green_steps))
@@ -64,6 +65,20 @@ class stateEncoder:
 
       obs = torch.tensor(rows, dtype=torch.float32)
       return obs, mask
+
+   def append_phase_ages(self, features, ages):
+      max_age_windows = self.episode_steps / self.green_steps
+
+      for phase_index in range(self.max_phases):
+         if phase_index < len(ages):
+            age_windows = max(0, ages[phase_index]) / self.green_steps
+            normalized_age = (
+               math.log1p(age_windows)
+               / math.log1p(max_age_windows)
+            )
+            features.append(normalized_age)
+         else:
+            features.append(0.0)
 
    def append_roads(self, features, roads, max_roads):
       for road in roads:

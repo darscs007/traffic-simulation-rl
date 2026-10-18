@@ -342,7 +342,7 @@
               ftime=(v.positionOnRoad-initPos) * currentRoad.lg/currentRoad.maxspeed;
             
            mstats.addVehicle(ftime/tstep,1);
-           tlmanager.addToLocalReward(initialIntersectionId,ftime/tstep,1);
+           tlmanager.addToLocalReward(initialIntersectionId,i,ftime/tstep,1,step);
 
            if(ftime/tstep + config.correction >= 0.9)v.currentImpatience =std::max(0.0f, v.currentImpatience - config.fullStepImpatienceReduction); // impatience_reduction
          }   
@@ -522,11 +522,11 @@
         v.isImpatient =changedPaths || v.currentImpatience > v.impatienceThreshold;
         
         mstats.addVehicle(timeSpentMoving/tstep,1);
-        tlmanager.addToLocalReward(i,timeSpentMoving/tstep,1);
+        tlmanager.addToLocalReward(i,traffic::externalRoadId,timeSpentMoving/tstep,1,step);
       }
         //general cases
         mstats.addVehicle(lastMovementTime,NoInitVehicles);
-        tlmanager.addToLocalReward(i,lastMovementTime,NoInitVehicles);
+        tlmanager.addToLocalReward(i,traffic::externalRoadId,lastMovementTime,NoInitVehicles,step);
 
         tlmanager.externalRoadScoring(city.getIntersection(i),waitQueues[i].size(),nextAllowedEntry[i]-ctime,step,waitQueues[i].size());
       } 

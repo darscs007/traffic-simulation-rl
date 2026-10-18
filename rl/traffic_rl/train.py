@@ -23,7 +23,7 @@ buffer = rolloutBuffer()
 
 start_episode=0
 checkpoint = None
-checkpoint_path = Path(__file__).parent / "checkpoints" / "ppo_13tl_3000_300v.pt" #last training to be continued, else None
+checkpoint_path = None #last training to be continued, else None
 
 if checkpoint_path is not None and checkpoint_path.exists():
     checkpoint = torch.load(checkpoint_path, weights_only=False)
@@ -68,12 +68,12 @@ native.prepare()
 native.set_callbacks(send, receive)
 
 try:
- for i in range(start_episode, start_episode+1000):
+ for i in range(start_episode, start_episode+4000):
   if i > 0: 
    native.reset(i)
   native.run_episode()
 
-  if (i+1)%4 == 0:  
+  if (i+1)%2 == 0:  
    rollout = buffer.tensors()
    learning_rollout = rollout.copy()
    learning_rollout["rewards"] = rollout["rewards"] / config["green_steps"]
@@ -82,14 +82,14 @@ try:
 
    metrics = ppo.ppo_update(model, optimizer, rollout, advantages, returns)  
     
-   print("mean reward:", rollout["rewards"].mean().item(),"mean return:", returns.mean().item(),"actor:", metrics["actor_loss"],"critic:", metrics["critic_loss"],"entropy:", metrics["entropy"])
+   print("i:",i ,"mean reward:", rollout["rewards"].mean().item(),"mean return:", returns.mean().item(),"actor:", metrics["actor_loss"],"critic:", metrics["critic_loss"],"entropy:", metrics["entropy"])
    buffer.clear()
 finally:
     native.clear_callbacks()
 
 Path("rl/traffic_rl/checkpoints").mkdir(parents=True, exist_ok=True)
 
-checkpoint_path = Path(__file__).parent / "checkpoints" / "ppo_13tl_4000_300v.pt"
+checkpoint_path = Path(__file__).parent / "checkpoints" / "ppo_50tl_4000_2000v_0.23p_2.pt"
 checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
 torch.save({"model_state": model.state_dict(),"optimizer_state": optimizer.state_dict(),"episode": i + 1,"feature_count": current_obs.shape[1],"max_phases": current_mask.shape[1],"torch_rng_state": torch.get_rng_state()},checkpoint_path)

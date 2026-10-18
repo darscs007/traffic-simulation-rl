@@ -13,7 +13,7 @@ import traffic_rl_native as native
 config = native.get_config()
 
 
-checkpoint = torch.load(Path(__file__).parent / "checkpoints" / "ppo_13tl_3000_300v.pt",weights_only=False)
+checkpoint = torch.load(Path(__file__).parent / "checkpoints" / "ppo_50tl_4000_2000v_0.23p_2.pt",weights_only=False)
 
 layout = None
 encoder = None

@@ -19,9 +19,9 @@ simulationConfig config;
 
 struct genConfig
 {
- int noIntersections = 13;
- int maxNoRoads = 80; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
- int halfLength =150; // all intersections are in the square
+ int noIntersections = 50;
+ int maxNoRoads = 90; //with limits >=n-1, but the generator may not reach this number, <= 3n-3-h
+ int halfLength =350; // all intersections are in the square
  int seed=67;
  int nodeCandidates = 20;
 
@@ -33,7 +33,7 @@ struct genConfig
  int maximumRejection=70;
  float chanceBidirectional=0.8f;
 
- float triangleRetention=0.7f;
+ float triangleRetention=0.05f;
  float minReductionFactor = 1.1f; //used to check if a triangle is close to degenerate
  float baseInterest=0.0f;
  float baseDeparture=0.0f;
@@ -43,8 +43,8 @@ struct genConfig
  float intConnectFactor=0.1f;
  float randFactor=0.1f;
 
- bool moreRandom=1;
- bool generateCircular=0;
+ bool moreRandom=0;
+ bool generateCircular=1;
 }configuration1;
 
 class cityGenerator

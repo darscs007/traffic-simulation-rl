@@ -828,8 +828,8 @@
       reloadMap.disabled = true;
       try {
         const [intersections, roads] = await Promise.all([
-          fetch(`data/citiesForTraining/fiveIntersections/intersections.csv?${Date.now()}`).then(response => response.text()),
-          fetch(`data/citiesForTraining/fiveIntersections/roads.csv?${Date.now()}`).then(response => response.text())
+          fetch(`data/citiesForTraining/fiftyIntersections/intersections.csv?${Date.now()}`).then(response => response.text()),
+          fetch(`data/citiesForTraining/fiftyIntersections/roads.csv?${Date.now()}`).then(response => response.text())
         ]);
         roadBoundsById.clear();
         draw(parseCsv(intersections), parseCsv(roads));

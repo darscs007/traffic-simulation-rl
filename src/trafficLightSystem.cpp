@@ -200,7 +200,12 @@
         auto& row = trafficLights[i].roadChangeMatrix[actions[i]];
         std::fill(row.begin(), row.end(), 0);
       }
+      trafficLights[i].roadsTL[trafficLights[i].currentState].lastStepGreen=step;
+
       trafficLights[i].currentState=actions[i];
+      trafficLights[i].roadsTL[trafficLights[i].currentState].lastStepGreen=step;
+     
+
        
       trafficLights[i].countLocalVehicles=0;
       }
@@ -348,7 +353,12 @@
    int timeSincePhase= step-phaseStartStep[currentIntersectionId];
    int externalCount=trafficLights[currentIntersectionId].roadsTL[0].count;
    
-   return {currentPhase,timeSincePhase,externalCount, adjIntRoads, adjRoads, trafficLights[currentIntersectionId].roadChangeMatrix,adjRoadPhases,adjTLTimes};
+   std::vector<int> timeSinceGreen;
+   for(int i=0; i < trafficLights[currentIntersectionId].roadsTL.size(); i++)
+    if(i==trafficLights[currentIntersectionId].currentState)  timeSinceGreen.push_back(0);
+    else timeSinceGreen.push_back(step-trafficLights[currentIntersectionId].roadsTL[i].lastStepGreen);
+
+   return {currentPhase,timeSincePhase,externalCount, adjIntRoads, adjRoads, trafficLights[currentIntersectionId].roadChangeMatrix,adjRoadPhases,adjTLTimes,timeSinceGreen};
 
   }
 
@@ -358,12 +368,17 @@
       globalReward+=fMoving-fStationary;
   }
 
-  void trafficLightSystem::addToLocalReward(int initialIntersectionId, float fraction, int count)
+  void trafficLightSystem::addToLocalReward(int initialIntersectionId, int initialRoadId ,float fraction, int count, int step)
   {
     if(config.isRL)
     {
       trafficLights[initialIntersectionId].localReward+= fraction * count;
-      trafficLights[initialIntersectionId].localReward-= (1.0f - fraction) * count;
+      int ind=0;
+      for(ind; ind < trafficLights[initialIntersectionId].roadsTL.size(); ind++)
+        if(trafficLights[initialIntersectionId].roadsTL[ind].roadId ==initialRoadId)
+        break;
+
+      trafficLights[initialIntersectionId].localReward-= (1.0f - fraction) * (1.0f + (step-trafficLights[initialIntersectionId].roadsTL[ind].lastStepGreen)/config.defaultGreenSteps*0.21f) * count;
       trafficLights[initialIntersectionId].countLocalVehicles+=count;  
     }
   }
