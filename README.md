@@ -1,4 +1,9 @@
-﻿# Traffic Simulator for Adaptive Control and Reinforcement Learning
+﻿<p align="center">
+  <img src="assets/dashboard.png" alt="Traffic simulator demo" width="900">
+  <br>
+</p>
+
+# Traffic Simulator for Adaptive Control and Reinforcement Learning
 
 A C++ microscopic traffic simulator built for **machine-learning and reinforcement-learning traffic-light control**. It includes a multi-agent RL controller with a shared PPO policy: one policy controls every intersection from its own local observation. (In progress)
 
@@ -77,7 +82,22 @@ Simulation / trafficLightSystem (C++)
 
 The Python implementation is in `rl/traffic_rl/`: `encoder.py`, `model.py`, `ppo.py`, `train.py` (training entry point), and `evaluate.py` (deterministic `argmax` evaluation and optional trace export). The extension target is `traffic_rl_native`.
 
-**Current experiment results for the 5- and 50-intersection cities are stored in `rl/runs/`**
+### RL results: 50-intersection city
+
+The strongest evaluated policy was the shared PPO agent trained with a **0.23 penalty factor**. On the same ten traffic seeds, it completed an average of **9,019 trips per simulation interval**—**3.3% more than the adaptive controller** and **28.0% more than the fixed-time baseline**.
+
+Each evaluation used 2,000 vehicles concentrated in part of a 50-intersection city and ran for 4,000 simulation steps. Traffic seeds 101–110 were shared by all three main controllers.
+
+| Controller | Average completed trips / interval | Change vs. adaptive | Change vs. static |
+| --- | ---: | ---: | ---: |
+| Static | 7,046 | −19.3% | — |
+| Adaptive | 8,731 | — | +23.9% |
+| RL, penalty factor 0.25 | 8,855 | +1.4% | +25.7% |
+| **RL, penalty factor 0.23 (best)** | **9,019** | **+3.3%** | **+28.0%** |
+
+The 0.23 policy outperformed adaptive control on every evaluated seed, from **+0.2%** (seed 108) to **+6.9%** (seed 101). It also surpassed the static controller on all ten seeds, with improvements from **+18.4%** to **+39.1%**. Nearby penalty factors were not uniformly better: the 0.25 model averaged 8,855 trips, while the tested 0.22, 0.24, 0.26, and 0.27 configurations were suboptimal in their available evaluations.
+
+**Full experiment results for the 5- and 50-intersection cities are stored in `rl/runs/`.**
 
 ## Procedural city generator
 
@@ -295,18 +315,16 @@ start_visualizer.bat
 
 The current model intentionally uses one lane per directed road and one green movement per intersection. It does not yet simulate turning lanes, pedestrians, yellow/all-red intervals.
 
-- Rerouting only uses valid routes that continue toward the destination. A saturated downstream cut may have no meaningful escape route.
-- Adaptive control guarantees a minimum service duration for every phase. RL directly selects a phase at every control boundary, so it can exceed adaptive throughput in stable traffic but currently has no hard per-phase anti-starvation constraint.
-- The current RL policy is a feed-forward shared MLP with one-hop neighbour observations. It has no recurrent memory, multi-hop message passing, or GNN.
-- RL robustness under severe congestion is still under study.
-- Detailed traces can be very large. The visualizer loads them lazily, but temporal and spatial chunking are to be implemented.
+- Rerouting only uses valid routes that continue toward the destination. A saturated downstream cut may have no meaningful escape route
+- Adaptive control guarantees a minimum service duration for every phase. RL directly selects a phase at every control boundary, so it can exceed adaptive throughput in stable traffic but currently has no hard per-phase anti-starvation constraint
+- The current RL policy is a feed-forward shared MLP with one-hop neighbour observations. It has no recurrent memory, multi-hop message passing, or GNN
+- RL robustness under severe congestion is still under study
+- Detailed traces can be very large. The visualizer loads them lazily, but temporal and spatial chunking are to be implemented
 - The RL agent is trained using all traffic information (**It doesn't have a limit regarding vehicleDetectionRadius. The adaptive one does**)
 
 ## Next steps
 
-- Add per-phase anti-starvation information/protection while retaining direct RL phase selection.
-- Build a reproducible 10-intersection RL-versus-adaptive case study with flow, stationary-vehicle, trip-statistics, and multi-seed plots.
-- Improve visualizer by temporal/spatial trace chunking.
-- Add more generator styles, including hierarchical arterial layouts using L-trees.
-- Add automated tests for spacing, routing, trace consistency, and metrics.
-- Add strongly connected components validation for user-provided cities.
+- Improve visualizer by temporal/spatial trace chunking
+- Expand the scope of the simulation: Real world cities with real world scenarios
+- Add more generator styles, including hierarchical arterial layouts using L-trees
+- Add strongly connected components validation for user-provided cities
