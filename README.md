@@ -97,7 +97,9 @@ Each evaluation used 2,000 vehicles concentrated in part of a 50-intersection ci
 
 The 0.23 policy outperformed adaptive control on every evaluated seed, from **+0.2%** (seed 108) to **+6.9%** (seed 101). It also surpassed the static controller on all ten seeds, with improvements from **+18.4%** to **+39.1%**. Nearby penalty factors were not uniformly better: the 0.25 model averaged 8,855 trips, while the tested 0.22, 0.24, 0.26, and 0.27 configurations were suboptimal in their available evaluations.
 
-**Full experiment results for the 5- and 50-intersection cities are stored in `rl/runs/`.**
+The model-comparison report is available as [PDF](assets/Model_comparisson.pdf).
+
+**Reproducibility files:** the 5-intersection setup and run are [`rl/configs/baseconfig_5intersections.txt`](rl/configs/baseconfig_5intersections.txt) and [`rl/runs/fiveIntersections.txt`](rl/runs/fiveIntersections.txt). The archived 50-intersection setup and run use the renamed files [`rl/configs/baseconfig_50Intersections_old.txt`](rl/configs/baseconfig_50Intersections_old.txt) and [`rl/runs/50Intersections_old.txt`](rl/runs/50Intersections_old.txt).
 
 ## Procedural city generator
 
