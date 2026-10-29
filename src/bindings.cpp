@@ -19,11 +19,11 @@ Simulation sim(config, noTrace0, noTrace1, noTrace2);
 
 void startOutput()
 {
-    const std::filesystem::path output =std::filesystem::path(PROJECT_PATH) / "output";
+    const std::filesystem::path output = std::filesystem::path(PROJECT_PATH) / "output";
 
-    noTrace0.open(output / "level0" / "statistics.bin",std::ios::binary | std::ios::trunc);
-    noTrace1.open(output / "level1" / "congestion.bin",std::ios::binary | std::ios::trunc);
-    noTrace2.open(output / "level2" / "detailed.bin",std::ios::binary | std::ios::trunc);
+    noTrace0.open(output / "level0" / "statistics.bin", std::ios::binary | std::ios::trunc);
+    noTrace1.open(output / "level1" / "congestion.bin", std::ios::binary | std::ios::trunc);
+    noTrace2.open(output / "level2" / "detailed.bin", std::ios::binary | std::ios::trunc);
 
     if (!noTrace0 || !noTrace1 || !noTrace2)
         throw std::runtime_error("Could not open trace files");
@@ -33,16 +33,14 @@ void startOutput()
         CONGESTION_MAGIC,
         TRACE_VERSION,
         config.steps,
-        static_cast<std::uint32_t>(sim.getNoRoads())
-    };
+        static_cast<std::uint32_t>(sim.getNoRoads())};
     traceHeader detailedHeader{VEHICLES_MAGIC, TRACE_VERSION, config.steps, 0};
 
-    noTrace0.write(reinterpret_cast<const char*>(&statsHeader), sizeof(statsHeader));
-    noTrace1.write(reinterpret_cast<const char*>(&congestionHeader), sizeof(congestionHeader));
+    noTrace0.write(reinterpret_cast<const char *>(&statsHeader), sizeof(statsHeader));
+    noTrace1.write(reinterpret_cast<const char *>(&congestionHeader), sizeof(congestionHeader));
 
     if (config.detailedRendering)
-        noTrace2.write(reinterpret_cast<const char*>(&detailedHeader), sizeof(detailedHeader));
-
+        noTrace2.write(reinterpret_cast<const char *>(&detailedHeader), sizeof(detailedHeader));
 }
 
 void finishOutput()
@@ -60,12 +58,12 @@ void clearCallbacks()
 
 void prepare()
 {
-sim.readCity();
-sim.setTime(0.0, 0.1);
-sim.initializeShortestPaths();
-sim.initializeWeights(config.cityDirectory + "demand.csv");
-sim.configureTrafficLights();
-sim.initializeVehicles();
+    sim.readCity();
+    sim.setTime(0.0, 0.1);
+    sim.initializeShortestPaths();
+    sim.initializeWeights(config.cityDirectory + "demand.csv");
+    sim.configureTrafficLights();
+    sim.initializeVehicles();
 }
 
 void runEpisode()
@@ -81,11 +79,11 @@ void registerCallbacks(sendData sender, getActions receiver)
 
 void reset(int i)
 {
- sim.reset(i);
+    sim.reset(i);
 }
 
 py::dict getConfig()
-    {
+{
     py::dict result;
 
     result["max_cars"] = config.maxcars;
@@ -93,42 +91,39 @@ py::dict getConfig()
     result["green_steps"] = config.defaultGreenSteps;
 
     return result;
-    }
+}
 
-PYBIND11_MODULE(traffic_rl_native, m) {
+PYBIND11_MODULE(traffic_rl_native, m)
+{
     m.def("start_output", &startOutput);
     m.def("finish_output", &finishOutput);
     m.def("get_config", &getConfig);
 
     py::class_<roadObservation>(m, "RoadObservation")
-    .def_readonly("detected_vehicles", &roadObservation::detectedVehicles)
-    .def_readonly("capacity", &roadObservation::capacity);
+        .def_readonly("detected_vehicles", &roadObservation::detectedVehicles)
+        .def_readonly("capacity", &roadObservation::capacity);
 
     py::class_<stateTL>(m, "StateTL")
-    .def_readonly("current_phase", &stateTL::currentPhase)
-    .def_readonly("time_since_phase", &stateTL::timeSincePhase)
-    .def_readonly("external_queue_size", &stateTL::externalQueueSize)
-    .def_readonly("incoming_roads", &stateTL::incomingRoads)
-    .def_readonly("outgoing_roads", &stateTL::outgoingRoads)
-    .def_readonly("road_change_matrix", &stateTL::roadChangeMatrix)
-    .def_readonly("adj_tl_phases", &stateTL::adjTLPhases)
-    .def_readonly("adj_tl_times", &stateTL::adjTLTimes)
-    .def_readonly("time_since_green", &stateTL::timeSinceGreen);
-    
+        .def_readonly("current_phase", &stateTL::currentPhase)
+        .def_readonly("time_since_phase", &stateTL::timeSincePhase)
+        .def_readonly("external_queue_size", &stateTL::externalQueueSize)
+        .def_readonly("incoming_roads", &stateTL::incomingRoads)
+        .def_readonly("outgoing_roads", &stateTL::outgoingRoads)
+        .def_readonly("road_change_matrix", &stateTL::roadChangeMatrix)
+        .def_readonly("adj_tl_phases", &stateTL::adjTLPhases)
+        .def_readonly("adj_tl_times", &stateTL::adjTLTimes)
+        .def_readonly("time_since_green", &stateTL::timeSinceGreen);
+
     py::class_<controlDataRL>(m, "ControlDataRL")
-    .def_readonly("states", &controlDataRL::states)
-    .def_readonly("rewards", &controlDataRL::rewards)
-    .def_readonly("step", &controlDataRL::step)
-    .def_readonly("first_step", &controlDataRL::firstStep)
-    .def_readonly("done", &controlDataRL::done);
+        .def_readonly("states", &controlDataRL::states)
+        .def_readonly("rewards", &controlDataRL::rewards)
+        .def_readonly("step", &controlDataRL::step)
+        .def_readonly("first_step", &controlDataRL::firstStep)
+        .def_readonly("done", &controlDataRL::done);
 
-m.def("prepare", &prepare);
-m.def("set_callbacks", &registerCallbacks);
-m.def("run_episode", &runEpisode);
-m.def("clear_callbacks", &clearCallbacks);
-m.def("reset", &reset);
+    m.def("prepare", &prepare);
+    m.def("set_callbacks", &registerCallbacks);
+    m.def("run_episode", &runEpisode);
+    m.def("clear_callbacks", &clearCallbacks);
+    m.def("reset", &reset);
 }
-
-
-
-

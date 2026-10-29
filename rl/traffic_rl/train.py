@@ -73,7 +73,7 @@ try:
    native.reset(i)
   native.run_episode()
 
-  if (i+1)%2 == 0:  
+  if (i+1) % 2 == 0:  
    rollout = buffer.tensors()
    learning_rollout = rollout.copy()
    learning_rollout["rewards"] = rollout["rewards"] / config["green_steps"]
